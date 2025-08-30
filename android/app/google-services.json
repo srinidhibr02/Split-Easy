@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "507693682170",
+    "project_id": "spliteasy-8340f",
+    "storage_bucket": "spliteasy-8340f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:507693682170:android:74d3732b97c16406b12843",
+        "android_client_info": {
+          "package_name": "com.example.split_easy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDSoDLrL02thaCEario1tTjnwHAY6VEUBA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
