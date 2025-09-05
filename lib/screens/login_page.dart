@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:split_easy/constants.dart'; // Make sure secondary color is defined here.
+import 'package:split_easy/constants.dart';
+import 'package:split_easy/services/auth_services.dart';
+import 'package:split_easy/widgets/otp_input.dart'; // Make sure secondary color is defined here.
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -12,6 +14,8 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  final _userSevice = AuthServices();
+
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController otpVerifyController = TextEditingController();
   bool showOTP = false;
@@ -20,19 +24,27 @@ class _LoginPageState extends State<LoginPage> {
   String verificationId = "";
 
   Future<void> sendOTP() async {
-    await FirebaseAuth.instance.verifyPhoneNumber(
-      phoneNumber: phoneController.text.trim(),
-      verificationCompleted: (PhoneAuthCredential credential) async {
+    await _userSevice.sendOTP(
+      phoneNumber: '+91${phoneController.text.trim()}',
+      verificationCompleted: (credential) async {
         await FirebaseAuth.instance.signInWithCredential(credential);
         //navigate to next Page
+        ScaffoldMessenger.of(
+          // ignore: use_build_context_synchronously
+          context,
+        ).showSnackBar(SnackBar(content: Text("Login Successful")));
+        // ignore: use_build_context_synchronously
+        Navigator.pushReplacementNamed(context, "/userInfo");
       },
       verificationFailed: (FirebaseAuthException e) {
-        print(e.message);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Error: ${e.message}")));
       },
       codeSent: (String verId, int? resendToken) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("OTP Sent")));
         setState(() {
           verificationId = verId;
           showOTP = true;
@@ -45,7 +57,26 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  verifyOTP() {}
+  Future<void> verifyOTP(
+    String otp,
+    String verificationId,
+    BuildContext context,
+  ) async {
+    try {
+      await _userSevice.verifyOTP(otp: otp, verificationId: verificationId);
+      ScaffoldMessenger.of(
+        // ignore: use_build_context_synchronously
+        context,
+      ).showSnackBar(SnackBar(content: Text("Login Successfull")));
+      // ignore: use_build_context_synchronously
+      Navigator.pushReplacementNamed(context, "/userInfo");
+    } catch (e) {
+      ScaffoldMessenger.of(
+        // ignore: use_build_context_synchronously
+        context,
+      ).showSnackBar(SnackBar(content: Text("Invalid OTP")));
+    }
+  }
 
   //Timer Logic
   void startTimer() {
@@ -124,13 +155,14 @@ class _LoginPageState extends State<LoginPage> {
                   fit: BoxFit.contain,
                 ),
 
-                if (showOTP) ...[
+                if (!showOTP) ...[
                   // Phone Number Field
                   TextField(
                     controller: phoneController,
                     keyboardType: TextInputType.phone,
                     maxLength: 10,
                     decoration: InputDecoration(
+                      counterText: "",
                       labelText: "Phone Number",
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.phone),
@@ -160,37 +192,11 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ] else ...[
-                  // Verify OTP Field
-                  TextField(
-                    controller: phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: InputDecoration(
-                      labelText: "Verify OTP",
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.phone),
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  // Verify Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {},
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primary,
-                        padding: EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: Text(
-                        "Verify",
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                  //verify OTP Screen
+                  OtpInputWidget(
+                    onSubmit: (otp) async {
+                      await verifyOTP(otp, verificationId, context);
+                    },
                   ),
                 ],
               ],

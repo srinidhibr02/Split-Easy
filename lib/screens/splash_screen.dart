@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:split_easy/screens/login_page.dart';
+import 'package:split_easy/services/auth_services.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -11,17 +11,14 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> {
   Timer? _timer;
+  final userServices = AuthServices();
 
   @override
   void initState() {
     super.initState();
     //Splash Logic
     _timer = Timer(Duration(seconds: 3), () {
-      //Navigation Logic
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-      );
+      _checkLogin();
     });
   }
 
@@ -29,6 +26,16 @@ class _SplashScreenState extends State<SplashScreen> {
   void dispose() {
     super.dispose();
     _timer?.cancel();
+  }
+
+  void _checkLogin() {
+    if (userServices.checkLogin()) {
+      // print("Already Logged in");
+      Navigator.pushReplacementNamed(context, "/authScreen");
+    } else {
+      // print("You must login");
+      Navigator.pushReplacementNamed(context, "/authScreen");
+    }
   }
 
   @override
