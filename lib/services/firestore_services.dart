@@ -6,15 +6,39 @@ class FirestoreServices {
 
   Future<void> createUserInFireStore(User? user) async {
     if (user == null) return;
-    final userDoc = _fireStore.collection("users").doc(user.uid);
+    final userDoc = _fireStore.collection("users").doc(user.phoneNumber);
     final docSnapshot = await userDoc.get();
     if (!docSnapshot.exists) {
       await userDoc.set({
-        "uid": user.uid,
         "phoneNumber": user.phoneNumber,
         "createdAt": FieldValue.serverTimestamp(),
         "isProfileCompleted": false, // you can use this later
       });
     }
+  }
+
+  Future<void> updateUserInfo({
+    required User? user,
+    required String userName,
+    required String avatar,
+  }) async {
+    if (user == null) return;
+    final userDoc = _fireStore.collection("users").doc(user.phoneNumber);
+    await userDoc.set({
+      "name": userName,
+      "avatar": avatar,
+      "isProfileCompleted": true,
+    });
+  }
+
+  Future<void> createGroup({
+    required String name,
+    required String purpose,
+  }) async {
+    await _fireStore.collection("groups").add({
+      "name": name,
+      "purpose": purpose,
+      "createdAt": DateTime.now(),
+    });
   }
 }

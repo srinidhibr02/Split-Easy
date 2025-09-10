@@ -28,10 +28,10 @@ class _SplashScreenState extends State<SplashScreen> {
     _timer?.cancel();
   }
 
-  void _checkLogin() {
+  Future<void> _checkLogin() async {
     if (userServices.checkLogin()) {
       // print("Already Logged in");
-      Navigator.pushReplacementNamed(context, "/authScreen");
+      Navigator.pushReplacementNamed(context, "/userInfo");
     } else {
       // print("You must login");
       Navigator.pushReplacementNamed(context, "/authScreen");
