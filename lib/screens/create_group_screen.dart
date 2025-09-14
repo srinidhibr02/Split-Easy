@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:split_easy/constants.dart';
+import 'package:split_easy/services/auth_services.dart';
 import 'package:split_easy/services/firestore_services.dart';
 
 class CreateGroupScreen extends StatefulWidget {
@@ -11,7 +12,8 @@ class CreateGroupScreen extends StatefulWidget {
 
 class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final TextEditingController nameController = TextEditingController();
-  final FirestoreServices _firestoreServices = FirestoreServices();
+  // final FirestoreServices _firestoreServices = FirestoreServices();
+  final AuthServices _authServices = AuthServices();
 
   bool isLoading = false;
   String? selectedPurpose;
@@ -37,14 +39,14 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     });
 
     try {
-      await _firestoreServices.createGroup(
-        name: groupName,
+      await _authServices.createGroup(
+        groupName: groupName,
         purpose: selectedPurpose!,
       );
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Group Created Successfully!")),
       );
-      Navigator.pop(context);
+      Navigator.pop(context, true);
     } catch (e) {
       ScaffoldMessenger.of(
         context,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:split_easy/constants.dart';
+import 'package:split_easy/services/auth_services.dart';
 
 class UserInfo extends StatefulWidget {
   const UserInfo({super.key});
@@ -11,6 +12,8 @@ class UserInfo extends StatefulWidget {
 class _UserInfoState extends State<UserInfo> {
   final TextEditingController _nameController = TextEditingController();
   String? _selectedAvatar;
+
+  final _authService = AuthServices();
 
   final List<String> avatar = [
     "https://cdn-icons-png.flaticon.com/512/4140/4140037.png",
@@ -24,7 +27,7 @@ class _UserInfoState extends State<UserInfo> {
     "https://cdn-icons-png.flaticon.com/512/4140/4140041.png",
   ];
 
-  void _submit() {
+  Future<void> _submit() async {
     if (_nameController.text.isEmpty || _selectedAvatar == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -33,8 +36,21 @@ class _UserInfoState extends State<UserInfo> {
       );
       return;
     }
-    //TODO: Save to firestore via Service
-    Navigator.pushReplacementNamed(context, "/home");
+    try {
+      await _authService.saveUserInfo(
+        name: _nameController.text,
+        avatar: _selectedAvatar!,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Profile updated successfully.")),
+      );
+    } catch (e) {
+      print(e);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to update Profile.")),
+      );
+    }
+    Navigator.pushReplacementNamed(context, "/homeScreen");
   }
 
   @override

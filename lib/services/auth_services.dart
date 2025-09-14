@@ -12,11 +12,14 @@ class AuthServices {
   String get uid => _auth.currentUser!.uid;
 
   bool checkLogin() {
-    // print(_auth.currentUser);
     if (_auth.currentUser != null) {
       return true;
     }
     return false;
+  }
+
+  Future<bool> isProfileCompleted() async {
+    return await firestoreServices.isProfileCompleted(currentUser);
   }
 
   Future<void> sendOTP({
@@ -75,6 +78,17 @@ class AuthServices {
       user: user,
       userName: name,
       avatar: avatar,
+    );
+  }
+
+  Future<void> createGroup({
+    required String groupName,
+    required String purpose,
+  }) async {
+    await firestoreServices.createGroup(
+      user: currentUser!,
+      name: groupName,
+      purpose: purpose,
     );
   }
 
