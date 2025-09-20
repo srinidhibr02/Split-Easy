@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:split_easy/constants.dart';
 import 'package:split_easy/services/auth_services.dart';
@@ -14,7 +13,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _userSevice = AuthServices();
+  final _authSevice = AuthServices();
 
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController otpVerifyController = TextEditingController();
@@ -23,25 +22,30 @@ class _LoginPageState extends State<LoginPage> {
   Timer? countdownTimer;
   String verificationId = "";
 
+  Future<void> profileCompletion() async {
+    final isProfileCompleted = _authSevice.isProfileCompleted();
+    if (await isProfileCompleted) {
+      Navigator.pushReplacementNamed(context, "/homeScreen");
+    } else {
+      Navigator.pushReplacementNamed(context, "/userInfo");
+    }
+  }
+
   Future<void> sendOTP() async {
-    await _userSevice.sendOTP(
+    await _authSevice.sendOTP(
       phoneNumber: '+91${phoneController.text.trim()}',
-      verificationCompleted: (credential) async {
-        await FirebaseAuth.instance.signInWithCredential(credential);
-        //navigate to next Page
+      onLoginSuccess: () async {
         ScaffoldMessenger.of(
-          // ignore: use_build_context_synchronously
           context,
         ).showSnackBar(SnackBar(content: Text("Login Successful")));
-        // ignore: use_build_context_synchronously
-        Navigator.pushReplacementNamed(context, "/userInfo");
+        profileCompletion();
       },
-      verificationFailed: (FirebaseAuthException e) {
+      onLoginFailed: (e) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Error: ${e.message}")));
       },
-      codeSent: (String verId, int? resendToken) {
+      onOtpSent: (String verId) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("OTP Sent")));
@@ -51,26 +55,20 @@ class _LoginPageState extends State<LoginPage> {
           startTimer();
         });
       },
-      codeAutoRetrievalTimeout: (String verId) {
-        verificationId = verId;
-      },
     );
   }
 
-  Future<void> verifyOTP(
-    String otp,
-    String verificationId,
-    BuildContext context,
-  ) async {
+  Future<void> verifyOTP(String otp) async {
     try {
-      await _userSevice.verifyOTP(otp: otp, verificationId: verificationId);
+      await _authSevice.verifyOTP(otp: otp, verificationId: verificationId);
       ScaffoldMessenger.of(
         // ignore: use_build_context_synchronously
         context,
       ).showSnackBar(SnackBar(content: Text("Login Successfull")));
       // ignore: use_build_context_synchronously
-      Navigator.pushReplacementNamed(context, "/userInfo");
+      profileCompletion();
     } catch (e) {
+      print(e);
       ScaffoldMessenger.of(
         // ignore: use_build_context_synchronously
         context,
@@ -195,7 +193,7 @@ class _LoginPageState extends State<LoginPage> {
                   //verify OTP Screen
                   OtpInputWidget(
                     onSubmit: (otp) async {
-                      await verifyOTP(otp, verificationId, context);
+                      await verifyOTP(otp);
                     },
                   ),
                 ],

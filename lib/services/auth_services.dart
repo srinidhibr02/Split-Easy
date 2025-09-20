@@ -10,29 +10,45 @@ class AuthServices {
   User? get currentUser => _auth.currentUser;
 
   String get uid => _auth.currentUser!.uid;
-  String verificationId = "";
 
   bool checkLogin() {
-    // print(_auth.currentUser);
     if (_auth.currentUser != null) {
       return true;
     }
     return false;
   }
 
+  Future<bool> isProfileCompleted() async {
+    return await firestoreServices.isProfileCompleted(currentUser);
+  }
+
   Future<void> sendOTP({
     required String phoneNumber,
-    required Function(PhoneAuthCredential) verificationCompleted,
-    required Function(FirebaseAuthException) verificationFailed,
-    required Function(String, int?) codeSent,
-    required Function(String) codeAutoRetrievalTimeout,
+    required Function() onLoginSuccess,
+    required Function(String verId) onOtpSent,
+    required Function(FirebaseAuthException) onLoginFailed,
   }) async {
     await _auth.verifyPhoneNumber(
       phoneNumber: phoneNumber,
-      verificationCompleted: verificationCompleted,
-      verificationFailed: verificationFailed,
-      codeSent: codeSent,
-      codeAutoRetrievalTimeout: codeAutoRetrievalTimeout,
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        try {
+          await _auth.signInWithCredential(credential);
+          await firestoreServices.createUserInFireStore(_auth.currentUser);
+          onLoginSuccess();
+        } on FirebaseAuthException catch (e) {
+          // print("Some error occured Mac");
+          onLoginFailed(e);
+        }
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        onLoginFailed(e);
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        onOtpSent(verificationId);
+      },
+      codeAutoRetrievalTimeout: (String verId) {
+        onOtpSent(verId);
+      },
     );
   }
 
@@ -51,13 +67,32 @@ class AuthServices {
     return userCredential;
   }
 
-  // void _isUserProfileComplete() async {
-  //   final user = _auth.currentUser;
-  //   final doc = await _fireStore.collection('users').doc(user!.uid).get();
-  //   final data = doc.data();
-  // }
+  Future<void> saveUserInfo({
+    required String name,
+    required String avatar,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception("No user Logged in");
+
+    await firestoreServices.updateUserInfo(
+      user: user,
+      userName: name,
+      avatar: avatar,
+    );
+  }
+
+  Future<void> createGroup({
+    required String groupName,
+    required String purpose,
+  }) async {
+    await firestoreServices.createGroup(
+      user: currentUser!,
+      name: groupName,
+      purpose: purpose,
+    );
+  }
 
   Future<void> signOut() async {
-    _auth.signOut();
+    await _auth.signOut();
   }
 }

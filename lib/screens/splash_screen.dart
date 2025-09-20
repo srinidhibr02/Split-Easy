@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:split_easy/services/auth_services.dart';
+import 'package:split_easy/services/firestore_services.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -12,6 +13,7 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen> {
   Timer? _timer;
   final userServices = AuthServices();
+  final fireService = FirestoreServices();
 
   @override
   void initState() {
@@ -28,12 +30,16 @@ class _SplashScreenState extends State<SplashScreen> {
     _timer?.cancel();
   }
 
-  void _checkLogin() {
-    if (userServices.checkLogin()) {
-      // print("Already Logged in");
-      Navigator.pushReplacementNamed(context, "/authScreen");
+  Future<void> _checkLogin() async {
+    final isLoggedIn = userServices.checkLogin();
+    if (isLoggedIn) {
+      final isCompletedProfile = await userServices.isProfileCompleted();
+      if (isCompletedProfile) {
+        Navigator.pushReplacementNamed(context, "/homeScreen");
+      } else {
+        Navigator.pushReplacementNamed(context, "/userInfo");
+      }
     } else {
-      // print("You must login");
       Navigator.pushReplacementNamed(context, "/authScreen");
     }
   }
