@@ -21,6 +21,18 @@ final List<Map<String, dynamic>> purposes = [
   {"label": "Others", "icon": Icons.widgets},
 ];
 
+final List<String> avatar = [
+  "https://cdn-icons-png.flaticon.com/512/4140/4140037.png",
+  "https://cdn-icons-png.flaticon.com/512/4140/4140047.png",
+  "https://cdn-icons-png.flaticon.com/512/4140/4140051.png",
+  "https://cdn-icons-png.flaticon.com/512/4140/4140040.png",
+  "https://cdn-icons-png.flaticon.com/512/6997/6997662.png",
+  "https://cdn-icons-png.flaticon.com/512/6997/6997668.png",
+  "https://cdn-icons-png.flaticon.com/512/6997/6997675.png",
+  "https://cdn-icons-png.flaticon.com/512/4140/4140038.png",
+  "https://cdn-icons-png.flaticon.com/512/4140/4140041.png",
+];
+
 IconData getPurposeIcon(String? label) {
   final purpose = purposes.firstWhere(
     (p) => p["label"] == label,

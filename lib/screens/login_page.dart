@@ -22,14 +22,23 @@ class _LoginPageState extends State<LoginPage> {
   Timer? countdownTimer;
   String verificationId = "";
 
+  Future<void> profileCompletion() async {
+    final isProfileCompleted = _authSevice.isProfileCompleted();
+    if (await isProfileCompleted) {
+      Navigator.pushReplacementNamed(context, "/homeScreen");
+    } else {
+      Navigator.pushReplacementNamed(context, "/userInfo");
+    }
+  }
+
   Future<void> sendOTP() async {
     await _authSevice.sendOTP(
       phoneNumber: '+91${phoneController.text.trim()}',
-      onLoginSuccess: () {
+      onLoginSuccess: () async {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Login Successful")));
-        Navigator.pushReplacementNamed(context, "/userInfo");
+        profileCompletion();
       },
       onLoginFailed: (e) {
         ScaffoldMessenger.of(
@@ -57,7 +66,7 @@ class _LoginPageState extends State<LoginPage> {
         context,
       ).showSnackBar(SnackBar(content: Text("Login Successfull")));
       // ignore: use_build_context_synchronously
-      Navigator.pushReplacementNamed(context, "/userInfo");
+      profileCompletion();
     } catch (e) {
       print(e);
       ScaffoldMessenger.of(

@@ -15,18 +15,6 @@ class _UserInfoState extends State<UserInfo> {
 
   final _authService = AuthServices();
 
-  final List<String> avatar = [
-    "https://cdn-icons-png.flaticon.com/512/4140/4140037.png",
-    "https://cdn-icons-png.flaticon.com/512/4140/4140047.png",
-    "https://cdn-icons-png.flaticon.com/512/4140/4140051.png",
-    "https://cdn-icons-png.flaticon.com/512/4140/4140040.png",
-    "https://cdn-icons-png.flaticon.com/512/6997/6997662.png",
-    "https://cdn-icons-png.flaticon.com/512/6997/6997668.png",
-    "https://cdn-icons-png.flaticon.com/512/6997/6997675.png",
-    "https://cdn-icons-png.flaticon.com/512/4140/4140038.png",
-    "https://cdn-icons-png.flaticon.com/512/4140/4140041.png",
-  ];
-
   Future<void> _submit() async {
     if (_nameController.text.isEmpty || _selectedAvatar == null) {
       ScaffoldMessenger.of(context).showSnackBar(
