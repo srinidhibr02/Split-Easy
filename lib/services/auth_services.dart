@@ -81,17 +81,6 @@ class AuthServices {
     );
   }
 
-  Future<void> createGroup({
-    required String groupName,
-    required String purpose,
-  }) async {
-    await firestoreServices.createGroup(
-      user: currentUser!,
-      name: groupName,
-      purpose: purpose,
-    );
-  }
-
   Future<void> signOut() async {
     await _auth.signOut();
   }

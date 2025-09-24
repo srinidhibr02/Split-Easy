@@ -7,7 +7,7 @@ import 'package:split_easy/services/firestore_services.dart';
 
 class GroupTab extends StatefulWidget {
   // ignore: use_super_parameters
-  GroupTab({Key? key}) : super(key: key);
+  const GroupTab({Key? key}) : super(key: key);
 
   @override
   State<GroupTab> createState() => _GroupTabState();
@@ -103,7 +103,7 @@ class _GroupTabState extends State<GroupTab> {
                             ),
                           ),
                           title: Text(
-                            group["name"] ?? "Unnamed",
+                            group["groupName"] ?? "Unnamed",
                             style: const TextStyle(
                               color: primary,
                               fontWeight: FontWeight.bold,

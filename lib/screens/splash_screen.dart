@@ -35,8 +35,10 @@ class _SplashScreenState extends State<SplashScreen> {
     if (isLoggedIn) {
       final isCompletedProfile = await userServices.isProfileCompleted();
       if (isCompletedProfile) {
+        // ignore: use_build_context_synchronously
         Navigator.pushReplacementNamed(context, "/homeScreen");
       } else {
+        // ignore: use_build_context_synchronously
         Navigator.pushReplacementNamed(context, "/userInfo");
       }
     } else {
