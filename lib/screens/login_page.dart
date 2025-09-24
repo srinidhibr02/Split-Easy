@@ -25,8 +25,10 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> profileCompletion() async {
     final isProfileCompleted = _authSevice.isProfileCompleted();
     if (await isProfileCompleted) {
+      // ignore: use_build_context_synchronously
       Navigator.pushReplacementNamed(context, "/homeScreen");
     } else {
+      // ignore: use_build_context_synchronously
       Navigator.pushReplacementNamed(context, "/userInfo");
     }
   }
@@ -68,7 +70,6 @@ class _LoginPageState extends State<LoginPage> {
       // ignore: use_build_context_synchronously
       profileCompletion();
     } catch (e) {
-      print(e);
       ScaffoldMessenger.of(
         // ignore: use_build_context_synchronously
         context,

@@ -29,15 +29,17 @@ class _UserInfoState extends State<UserInfo> {
         name: _nameController.text,
         avatar: _selectedAvatar!,
       );
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Profile updated successfully.")),
       );
     } catch (e) {
-      print(e);
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Failed to update Profile.")),
       );
     }
+    // ignore: use_build_context_synchronously
     Navigator.pushReplacementNamed(context, "/homeScreen");
   }
 

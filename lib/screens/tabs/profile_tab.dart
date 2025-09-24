@@ -138,8 +138,10 @@ class _ProfileTabState extends State<ProfileTab> {
                           onTap: () async {
                             await _authServices.signOut();
                             Navigator.of(
+                              // ignore: use_build_context_synchronously
                               context,
                             ).pushReplacementNamed("/authScreen");
+                            // ignore: use_build_context_synchronously
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text("Logged out")),
                             );

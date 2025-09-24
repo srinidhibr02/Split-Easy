@@ -18,7 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> _pages = [
     HomeTab(),
     GroupTab(),
-    FriendsTab(),
+    NotifyTab(),
     ProfileTab(),
   ];
 
@@ -44,10 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        actions: [
-          IconButton(icon: const Icon(Icons.search), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.notifications), onPressed: () {}),
-        ],
+        actions: [IconButton(icon: const Icon(Icons.search), onPressed: () {})],
       ),
       body: _pages[_selectedIndex], // Show current tab page
       bottomNavigationBar: BottomNavigationBar(
@@ -58,7 +55,10 @@ class _HomeScreenState extends State<HomeScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
           BottomNavigationBarItem(icon: Icon(Icons.group), label: "Group"),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Friends"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.notifications),
+            label: "Activity",
+          ),
           BottomNavigationBarItem(
             icon: Icon(Icons.account_circle),
             label: "Profile",

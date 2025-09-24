@@ -1,8 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 
 class FirestoreServices {
   final FirebaseFirestore _fireStore = FirebaseFirestore.instance;
+  final _auth = FirebaseAuth.instance;
+
+  String? get currentPhoneNumber => _auth.currentUser?.phoneNumber;
 
   DocumentReference getUserDoc(User user) {
     return _fireStore.collection("users").doc(user.phoneNumber);
@@ -54,136 +58,231 @@ class FirestoreServices {
   }
 
   Future<void> createGroup({
-    required User user,
-    required String name,
+    required String groupName,
     required String purpose,
   }) async {
-    if (user == null) return;
-    final userDoc = _fireStore.collection("users").doc(user.phoneNumber);
-    await userDoc.update({
-      "groups": FieldValue.arrayUnion([
+    final userDoc = _fireStore.collection("users").doc(currentPhoneNumber);
+
+    // Get user data
+    final userSnapshot = await userDoc.get();
+    final userData = userSnapshot.exists ? userSnapshot.data()! : {};
+    final userName = userData["name"] ?? "Unknown";
+    final userAvatar = userData["avatar"] ?? "default_avatar_url";
+
+    // Create a new group in the global 'groups' collection
+    final newGroupDoc = await _fireStore.collection("groups").add({
+      "groupName": groupName,
+      "purpose": purpose,
+      "createdAt": FieldValue.serverTimestamp(),
+      "owner": {
+        "phoneNumber": currentPhoneNumber,
+        "name": userName,
+        "avatar": userAvatar,
+      },
+      "members": [
         {
-          "name": name,
-          "purpose": purpose,
-          "createdAt": DateTime.now(),
-          "members": [user.phoneNumber],
+          "phoneNumber": currentPhoneNumber,
+          "name": userName,
+          "avatar": userAvatar,
         },
-      ]),
+      ],
+    });
+
+    final groupId = newGroupDoc.id;
+
+    // Add groupId to the owner's 'groups' array
+    await userDoc.update({
+      "groups": FieldValue.arrayUnion([groupId]),
+    });
+
+    print("Group '$groupName' created successfully with ID: $groupId");
+  }
+
+  Stream<Map<String, dynamic>?> streamGroupById(String groupId) {
+    return _fireStore.collection("groups").doc(groupId).snapshots().map((
+      snapshot,
+    ) {
+      if (!snapshot.exists) return null;
+      return {"id": snapshot.id, ...snapshot.data()!};
     });
   }
 
   Stream<List<Map<String, dynamic>>> streamUserGroups(User user) {
-    if (user == null) return const Stream.empty();
-
     final userDoc = _fireStore.collection("users").doc(user.phoneNumber);
 
-    return userDoc.snapshots().map((snapshot) {
+    return userDoc.snapshots().asyncMap((snapshot) async {
       if (!snapshot.exists) return [];
-      final groups = snapshot.data()?["groups"] as List<dynamic>?;
-      return groups != null
-          ? groups.map((e) => Map<String, dynamic>.from(e)).toList()
-          : [];
+
+      final groupIds = List<String>.from(snapshot.data()?["groups"] ?? []);
+
+      if (groupIds.isEmpty) return [];
+
+      // Fetch all group documents for these IDs
+      final groupsQuery = await _fireStore
+          .collection("groups")
+          .where(FieldPath.documentId, whereIn: groupIds)
+          .get();
+
+      return groupsQuery.docs
+          .map((doc) => {"id": doc.id, ...doc.data()})
+          .toList();
     });
   }
 
   Future<void> addMemberToGroup({
-    required String userId, // Owner phone number
-    required String groupName,
+    required String groupId,
     required String newMemberPhoneNumber,
   }) async {
-    if (newMemberPhoneNumber.isEmpty) {
-      throw Exception("Invalid member phone number");
-    }
-
-    final userDoc = _fireStore.collection("users").doc(userId);
+    final groupDoc = _fireStore.collection("groups").doc(groupId);
     final newMemberDoc = _fireStore
         .collection("users")
         .doc(newMemberPhoneNumber);
 
-    await _fireStore.runTransaction((transaction) async {
-      // --- Step 1: Read owner & new member docs ---
-      final userSnapshot = await transaction.get(userDoc);
-      if (!userSnapshot.exists) throw Exception("Owner not found");
+    // Get group data
+    final groupSnapshot = await groupDoc.get();
+    if (!groupSnapshot.exists) {
+      print("Group not found");
+      return;
+    }
+    final groupData = groupSnapshot.data()!;
 
-      final newMemberSnapshot = await transaction.get(newMemberDoc);
+    // Get new member data
+    final newMemberSnapshot = await newMemberDoc.get();
+    final newMemberData = newMemberSnapshot.exists
+        ? newMemberSnapshot.data()!
+        : {"name": "Unknown", "avatar": "default_avatar_url"};
 
-      final userGroups = List<Map<String, dynamic>>.from(
-        userSnapshot.data()?["groups"] ?? [],
-      );
-      final groupIndex = userGroups.indexWhere((g) => g["name"] == groupName);
+    final newMemberInfo = {
+      "phoneNumber": newMemberPhoneNumber,
+      "name": newMemberData["name"],
+      "avatar": newMemberData["avatar"],
+    };
 
-      if (groupIndex == -1) throw Exception("Group not found");
+    // 1️⃣ Add member to group's members array
+    await groupDoc.update({
+      "members": FieldValue.arrayUnion([newMemberInfo]),
+    });
 
-      // --- Step 2: Work with full group object ---
-      final groupData = Map<String, dynamic>.from(userGroups[groupIndex]);
+    // 2️⃣ Add groupId to new member's groups array
+    await newMemberDoc.update({
+      "groups": FieldValue.arrayUnion([groupId]),
+    });
 
-      // Update members list only
-      final updatedMembers = <String>{
-        ...List<String>.from(groupData["members"] ?? []),
-        newMemberPhoneNumber,
-      };
-      groupData["members"] = updatedMembers.toList();
+    print(
+      "${newMemberData["name"]} added to group '${groupData["groupName"]}'",
+    );
+  }
 
-      // Replace owner’s copy with updated groupData
-      userGroups[groupIndex] = groupData;
+  //Stream of friends for the current User
+  Stream<List<Map<String, dynamic>>> getFriendsStream() {
+    final phone = currentPhoneNumber;
 
-      // --- Step 3: If new member exists, add groupData ---
-      List<Map<String, dynamic>>? newMemberGroups;
-      if (newMemberSnapshot.exists) {
-        newMemberGroups = List<Map<String, dynamic>>.from(
-          newMemberSnapshot.data()?["groups"] ?? [],
-        );
-        if (!newMemberGroups.any((g) => g["name"] == groupName)) {
-          newMemberGroups.add(groupData);
-        }
-      }
+    if (phone == null) {
+      throw Exception("No user logged in");
+    }
+    final userDoc = _fireStore.collection("users").doc(phone);
 
-      // --- Step 4: Prepare updates for all existing members ---
-      final otherMemberDocs = <DocumentReference>[];
-      final otherMemberGroupsList = <List<Map<String, dynamic>>>[];
-
-      for (final memberPhone in updatedMembers) {
-        if (memberPhone == userId || memberPhone == newMemberPhoneNumber)
-          continue;
-
-        final memberDoc = _fireStore.collection("users").doc(memberPhone);
-        final memberSnapshot = await transaction.get(memberDoc);
-        if (!memberSnapshot.exists) continue;
-
-        final memberGroups = List<Map<String, dynamic>>.from(
-          memberSnapshot.data()?["groups"] ?? [],
-        );
-
-        final idx = memberGroups.indexWhere((g) => g["name"] == groupName);
-        if (idx != -1) {
-          // Replace whole group object so purpose, createdAt, etc. are in sync
-          memberGroups[idx] = groupData;
-        }
-        otherMemberDocs.add(memberDoc);
-        otherMemberGroupsList.add(memberGroups);
-      }
-
-      // --- Step 5: Perform writes ---
-      transaction.update(userDoc, {"groups": userGroups});
-      if (newMemberGroups != null) {
-        transaction.update(newMemberDoc, {"groups": newMemberGroups});
-      }
-      for (int i = 0; i < otherMemberDocs.length; i++) {
-        transaction.update(otherMemberDocs[i], {
-          "groups": otherMemberGroupsList[i],
-        });
-      }
+    return userDoc.snapshots().map((snapshot) {
+      if (!snapshot.exists) return [];
+      final friends = snapshot.data()?["friends"] as List<dynamic>?;
+      return friends != null
+          ? friends.map((e) => Map<String, dynamic>.from(e)).toList()
+          : [];
     });
   }
 
-  Future<String> getUserNameByPhone(String phone) async {
-    final doc = await _fireStore.collection("users").doc(phone).get();
+  //adds expence to a group and updates balances for each member
+  Future<void> addExpenseToGroup({
+    required String groupName,
+    required String title,
+    required double amount,
+    required List<String> paidBy,
+    required List<String> participants,
+    required Map<String, double> splits,
+    required Map<String, double> contributions,
+    required String splitType, //equally | unequally
+  }) async {
+    final batch = _fireStore.batch();
 
-    if (doc.exists) {
-      final data = doc.data();
-      return data!["name"] ?? phone;
-    } else {
-      return phone;
+    try {
+      //prepare expense data
+      final expenseRef = _fireStore.collection("tmp").doc(); //just for id
+      final expenseId = expenseRef.id;
+
+      final expenseData = {
+        "id": expenseId,
+        "title": title,
+        "amount": amount,
+        "paidBy": paidBy,
+        "participants": participants,
+        "contributions": contributions,
+        "splits": splits,
+        "splitType": splitType,
+        "createdAt": FieldValue.serverTimestamp(),
+      };
+      for (final member in participants) {
+        final expenseDocRef = _fireStore
+            .collection("users")
+            .doc(member)
+            .collection("groups")
+            .doc(groupName)
+            .collection("expenses")
+            .doc(expenseId);
+
+        batch.set(expenseDocRef, expenseData);
+
+        //optional also update group's lastupdated field
+        final groupDocRef = _fireStore
+            .collection("users")
+            .doc(member)
+            .collection("groups")
+            .doc(groupName);
+        batch.set(groupDocRef, {
+          "lastExpense": {
+            "title": title,
+            "amount": amount,
+            "createdAt": FieldValue.serverTimestamp(),
+          },
+          "updatedAt": FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
+      //step 2 update balance inside friends subcollection
+      for (final participant in participants) {
+        final owed = splits[participant] ?? 0;
+        for (final payer in paidBy) {
+          if (participant == payer) continue;
+          final paidShare = (contributions[payer] ?? 0) * (owed / amount);
+
+          final payerFriendRef = _fireStore
+              .collection("users")
+              .doc(payer)
+              .collection("friends")
+              .doc(participant);
+
+          final participantFriendRef = _fireStore
+              .collection("users")
+              .doc(participant)
+              .collection("friends")
+              .doc(payer);
+
+          //payer side (+balance)
+          batch.set(payerFriendRef, {
+            "phoneNumber": participant,
+            "balance": FieldValue.increment(paidShare),
+          }, SetOptions(merge: true));
+
+          //participant side (-balance)
+          batch.set(participantFriendRef, {
+            "phoneNumber": payer,
+            "balance": FieldValue.increment(-paidShare),
+          }, SetOptions(merge: true));
+        }
+      }
+      //Step 3 commit
+      await batch.commit();
+    } catch (e) {
+      rethrow;
     }
   }
 }
