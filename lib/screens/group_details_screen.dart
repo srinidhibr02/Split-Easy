@@ -23,6 +23,8 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final groupId = widget.group["id"];
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -31,7 +33,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
               backgroundColor: primary,
               child: Icon(
                 color: white,
-                getPurposeIcon(widget.group["purpose"]), // ✅ purpose icon
+                getPurposeIcon(widget.group["purpose"]),
               ),
             ),
             const SizedBox(width: 10),
@@ -42,41 +44,279 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
           ],
         ),
       ),
-      body: Padding(
-        padding: EdgeInsets.all(16.0),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _roundButton(
-                icon: Icons.person_add,
-                label: "Add Member",
-                onPressed: () => _showAddMemberDialog(context),
+      body: Column(
+        children: [
+          // Action buttons
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _roundButton(
+                    icon: Icons.person_add,
+                    label: "Add Member",
+                    onPressed: () => _showAddMemberDialog(context),
+                  ),
+                  const SizedBox(width: 20),
+                  _roundButton(
+                    icon: Icons.attach_money,
+                    label: "Add Expense",
+                    onPressed: () =>
+                        _showAddExpenseDialog(context, widget.group),
+                  ),
+                  const SizedBox(width: 20),
+                  _roundButton(
+                    icon: Icons.group,
+                    label: "Members",
+                    onPressed: () => _showMembersDialog(context, widget.group),
+                  ),
+                  const SizedBox(width: 20),
+                  _roundButton(
+                    icon: Icons.summarize,
+                    label: "Totals",
+                    onPressed: () {},
+                  ),
+                ],
               ),
-              const SizedBox(width: 20),
-              _roundButton(
-                icon: Icons.attach_money,
-                label: "Add Expense",
-                onPressed: () => _showAddExpenseDialog(
-                  context,
-                  List<String>.from(widget.group["members"] ?? []),
-                ),
-              ),
-              const SizedBox(width: 20),
-              _roundButton(
-                icon: Icons.group,
-                label: "Members",
-                onPressed: () => _showMembersDialog(context, widget.group),
-              ),
-              const SizedBox(width: 20),
-              _roundButton(
-                icon: Icons.summarize,
-                label: "Totals",
-                onPressed: () {},
-              ),
-            ],
+            ),
           ),
-        ),
+
+          const SizedBox(height: 20),
+
+          // Expenses List
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection("groups")
+                  .doc(groupId)
+                  .collection("expenses")
+                  .orderBy("createdAt", descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      "No expenses yet",
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                  );
+                }
+
+                final expenses = snapshot.data!.docs;
+
+                final members = (widget.group["members"] as List<dynamic>)
+                    .map((e) => e as Map<String, dynamic>)
+                    .toList();
+
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: expenses.length,
+                  itemBuilder: (context, index) {
+                    final expenseDoc = expenses[index]; // QueryDocumentSnapshot
+                    final expense = expenseDoc.data() as Map<String, dynamic>;
+                    final expenseId =
+                        expenseDoc.id; // ✅ This is the document ID
+
+                    final title = expense["title"] ?? "";
+                    final amount = expense["amount"]?.toDouble() ?? 0;
+                    final splitType = expense["splitType"] ?? "";
+
+                    // Map phone numbers to member info
+                    List<Map<String, dynamic>> getMembersInfo(
+                      List<dynamic>? phoneList,
+                    ) {
+                      if (phoneList == null) return [];
+                      return phoneList.map((phone) {
+                        return members.firstWhere(
+                          (m) => m["phoneNumber"] == phone,
+                          orElse: () => {
+                            "name": phone,
+                            "avatar": "",
+                          }, // fallback
+                        );
+                      }).toList();
+                    }
+
+                    final paidByInfo = getMembersInfo(
+                      expense["paidBy"] as List<dynamic>?,
+                    );
+                    final participantsInfo = getMembersInfo(
+                      expense["participants"] as List<dynamic>?,
+                    );
+
+                    Widget buildMemberChips(
+                      List<Map<String, dynamic>> infoList,
+                    ) {
+                      return Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: infoList.map((m) {
+                          return Chip(
+                            avatar: CircleAvatar(
+                              radius: 12,
+                              backgroundImage:
+                                  m["avatar"] != null && m["avatar"] != ""
+                                  ? NetworkImage(m["avatar"])
+                                  : const AssetImage(
+                                          "assets/default_avatar.png",
+                                        )
+                                        as ImageProvider,
+                            ),
+                            label: Text(
+                              m["name"] ?? "Unknown",
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 0,
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    }
+
+                    return Card(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 3,
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      child: ExpansionTile(
+                        tilePadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        title: Row(
+                          children: [
+                            const Icon(Icons.attach_money, size: 18),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              "₹${amount.toStringAsFixed(2)}",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green,
+                              ),
+                            ),
+                          ],
+                        ),
+                        childrenPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        children: [
+                          if (paidByInfo.isNotEmpty) ...[
+                            const Text(
+                              "Paid By:",
+                              style: TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(height: 4),
+                            buildMemberChips(paidByInfo),
+                            const SizedBox(height: 8),
+                          ],
+                          if (participantsInfo.isNotEmpty) ...[
+                            const Text(
+                              "Participants:",
+                              style: TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(height: 4),
+                            buildMemberChips(participantsInfo),
+                            const SizedBox(height: 8),
+                          ],
+                          Text(
+                            "Split Type: $splitType",
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                          const SizedBox(height: 8),
+
+                          // ✅ Action buttons
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                onPressed: () {
+                                  // Open edit dialog
+                                  _showEditExpenseDialog(
+                                    context,
+                                    expenseId,
+                                    expense,
+                                    widget.group,
+                                  );
+                                },
+                                icon: const Icon(Icons.edit, size: 18),
+                                label: const Text("Edit"),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton.icon(
+                                onPressed: () async {
+                                  // Delete expense
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (_) => AlertDialog(
+                                      title: const Text("Delete Expense?"),
+                                      content: const Text(
+                                        "Are you sure you want to delete this expense?",
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(context, false),
+                                          child: const Text("Cancel"),
+                                        ),
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(context, true),
+                                          child: const Text("Delete"),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+
+                                  if (confirm == true) {
+                                    await FirebaseFirestore.instance
+                                        .collection("groups")
+                                        .doc(groupId)
+                                        .collection("expenses")
+                                        .doc(expenseId)
+                                        .delete();
+                                    // TODO: Optionally adjust balances if necessary
+                                  }
+                                },
+                                icon: const Icon(
+                                  Icons.delete,
+                                  size: 18,
+                                  color: Colors.red,
+                                ),
+                                label: const Text(
+                                  "Delete",
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -187,15 +427,16 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
   }
 
   // ✅ Add Expense Dialog
-  void _showAddExpenseDialog(BuildContext context, List<String> members) {
+  void _showAddExpenseDialog(BuildContext context, Map<String, dynamic> group) {
     final titleController = TextEditingController();
     final amountController = TextEditingController();
-
-    // For multiple payers
     List<String> selectedPayers = [];
+    List<String> selectedParticipants = [];
+    String? selectedSplitType = "Equally";
 
-    // For split type
-    String? selectedSplitType;
+    final members = (group["members"] as List<dynamic>)
+        .map((e) => e as Map<String, dynamic>)
+        .toList();
 
     showDialog(
       context: context,
@@ -217,11 +458,14 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 15),
-
-                // ✅ Multi Select Dropdown for Payers
-                MultiSelectDialogField(
+                MultiSelectDialogField<String>(
                   items: members
-                      .map((e) => MultiSelectItem<String>(e, e))
+                      .map(
+                        (e) => MultiSelectItem<String>(
+                          e["phoneNumber"] as String,
+                          e["name"] as String,
+                        ),
+                      )
                       .toList(),
                   title: const Text("Select Payers"),
                   buttonText: const Text("Select Payers"),
@@ -229,17 +473,37 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                     border: Border.all(color: Colors.grey),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  buttonIcon: const Icon(Icons.arrow_drop_down), // bottom arrow
+                  buttonIcon: const Icon(Icons.arrow_drop_down),
                   onConfirm: (values) {
                     setState(() {
                       selectedPayers = values.cast<String>();
                     });
                   },
                 ),
-
                 const SizedBox(height: 15),
-
-                // ✅ Dropdown for Split Type
+                MultiSelectDialogField<String>(
+                  items: members
+                      .map(
+                        (e) => MultiSelectItem<String>(
+                          e["phoneNumber"] as String,
+                          e["name"] as String,
+                        ),
+                      )
+                      .toList(),
+                  title: const Text("Select Participants"),
+                  buttonText: const Text("Select Participants"),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  buttonIcon: const Icon(Icons.arrow_drop_down),
+                  onConfirm: (values) {
+                    setState(() {
+                      selectedParticipants = values.cast<String>();
+                    });
+                  },
+                ),
+                const SizedBox(height: 15),
                 DropdownButtonFormField<String>(
                   initialValue: selectedSplitType,
                   decoration: InputDecoration(
@@ -247,9 +511,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    suffixIcon: const Icon(
-                      Icons.arrow_drop_down,
-                    ), // bottom arrow
+                    suffixIcon: const Icon(Icons.arrow_drop_down),
                   ),
                   items: ["Equally", "Unequally"].map((type) {
                     return DropdownMenuItem(value: type, child: Text(type));
@@ -274,20 +536,157 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                 final expenseAmount =
                     double.tryParse(amountController.text.trim()) ?? 0;
 
-                if (expenseTitle.isNotEmpty &&
-                    expenseAmount > 0 &&
-                    selectedPayers.isNotEmpty &&
-                    selectedSplitType != null) {
-                  // ✅ Call Firestore Service
+                if (expenseTitle.isEmpty ||
+                    expenseAmount <= 0 ||
+                    selectedPayers.isEmpty ||
+                    selectedParticipants.isEmpty ||
+                    selectedSplitType == null) {
+                  return;
+                }
+
+                Navigator.pop(context); // Close first dialog
+
+                if (selectedSplitType == "Equally") {
+                  // Calculate splits and contributions
+                  final perParticipant =
+                      expenseAmount / selectedParticipants.length;
+                  final perPayer = expenseAmount / selectedPayers.length;
+
+                  final splits = {
+                    for (var p in selectedParticipants) p: perParticipant,
+                  };
+                  final contributions = {
+                    for (var p in selectedPayers) p: perPayer,
+                  };
+
                   debugPrint(
-                    "Expense: $expenseTitle - ₹$expenseAmount | "
-                    "Payers: $selectedPayers | Split: $selectedSplitType",
+                    "Expense: $expenseTitle | Equally\nSplits: $splits\nContributions: $contributions",
+                  );
+
+                  // Call Firestore service
+                  firestoreServices.addExpense(
+                    groupId: group["id"],
+                    title: expenseTitle,
+                    amount: expenseAmount,
+                    paidBy: selectedPayers,
+                    participants: selectedParticipants,
+                    splits: splits,
+                    contributions: contributions,
+                    splitType: selectedSplitType as String,
+                  );
+                } else {
+                  // Unequally → open second dialog
+                  _showUnequalSplitDialog(
+                    context,
+                    group,
+                    expenseTitle,
+                    expenseAmount,
+                    selectedPayers,
+                    selectedParticipants,
+                    selectedSplitType!,
+                  );
+                }
+              },
+              child: const Text("Next"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Second dialog for Unequal splits
+  void _showUnequalSplitDialog(
+    BuildContext context,
+    Map<String, dynamic> group,
+    String title,
+    double amount,
+    List<String> paidBy,
+    List<String> participants,
+    String selectedSplitType,
+  ) {
+    final members = (group["members"] as List<dynamic>)
+        .map((e) => e as Map<String, dynamic>)
+        .toList();
+
+    final Map<String, TextEditingController> controllers = {
+      for (var p in participants) p: TextEditingController(),
+    };
+
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text("Enter Unequal Splits"),
+          content: SingleChildScrollView(
+            child: Column(
+              children: participants.map((participant) {
+                final name = members.firstWhere(
+                  (e) => e["phoneNumber"] == participant,
+                )["name"];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: TextField(
+                    controller: controllers[participant],
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: "$name's share",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final splits = <String, double>{};
+                double totalEntered = 0;
+
+                for (var participant in participants) {
+                  final value =
+                      double.tryParse(controllers[participant]?.text ?? "0") ??
+                      0;
+                  splits[participant] = value;
+                  totalEntered += value;
+                }
+
+                if ((totalEntered - amount).abs() > 0.01) {
+                  // Optional: warn if sum mismatch
+                  debugPrint(
+                    "Warning: Sum of splits ($totalEntered) does not match total amount ($amount)",
                   );
                 }
 
+                final perPayer = amount / paidBy.length;
+                final contributions = {for (var p in paidBy) p: perPayer};
+
+                debugPrint(
+                  "Expense: $title | Unequally\nSplits: $splits\nContributions: $contributions",
+                );
+
                 Navigator.pop(context);
+
+                // Call Firestore service
+                firestoreServices.addExpense(
+                  groupId: group["id"],
+                  title: title,
+                  amount: amount,
+                  paidBy: paidBy,
+                  participants: participants,
+                  splits: splits,
+                  contributions: contributions,
+                  splitType: selectedSplitType,
+                );
               },
-              child: const Text("Add"),
+              child: const Text("Add Expense"),
             ),
           ],
         ),
@@ -323,6 +722,169 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showEditExpenseDialog(
+    BuildContext context,
+    String expenseId,
+    Map<String, dynamic> expense,
+    Map<String, dynamic> group,
+  ) {
+    final titleController = TextEditingController(text: expense["title"] ?? "");
+    final amountController = TextEditingController(
+      text: (expense["amount"]?.toString() ?? "0"),
+    );
+
+    List<String> selectedPayers = List<String>.from(expense["paidBy"] ?? []);
+    List<String> selectedParticipants = List<String>.from(
+      expense["participants"] ?? [],
+    );
+    String? selectedSplitType = expense["splitType"];
+
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text("Edit Expense"),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(hintText: "Expense Title"),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: amountController,
+                  decoration: const InputDecoration(hintText: "Amount"),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 15),
+                MultiSelectDialogField(
+                  items: group["members"]
+                      .map<MultiSelectItem<String>>(
+                        (e) => MultiSelectItem<String>(
+                          e["phoneNumber"],
+                          e["name"],
+                        ),
+                      )
+                      .toList(),
+                  title: const Text("Select Payers"),
+                  initialValue: selectedPayers,
+                  buttonText: const Text("Select Payers"),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  buttonIcon: const Icon(Icons.arrow_drop_down),
+                  onConfirm: (values) {
+                    setState(() {
+                      selectedPayers = values.cast<String>();
+                    });
+                  },
+                ),
+                const SizedBox(height: 15),
+                MultiSelectDialogField(
+                  items: group["members"]
+                      .map<MultiSelectItem<String>>(
+                        (e) => MultiSelectItem<String>(
+                          e["phoneNumber"],
+                          e["name"],
+                        ),
+                      )
+                      .toList(),
+                  title: const Text("Select Participants"),
+                  initialValue: selectedParticipants,
+                  buttonText: const Text("Select Participants"),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  buttonIcon: const Icon(Icons.arrow_drop_down),
+                  onConfirm: (values) {
+                    setState(() {
+                      selectedParticipants = values.cast<String>();
+                    });
+                  },
+                ),
+                const SizedBox(height: 15),
+                DropdownButtonFormField<String>(
+                  value: selectedSplitType,
+                  decoration: InputDecoration(
+                    labelText: "Split Type",
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    suffixIcon: const Icon(Icons.arrow_drop_down),
+                  ),
+                  items: ["Equally", "Unequally"].map((type) {
+                    return DropdownMenuItem(value: type, child: Text(type));
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      selectedSplitType = value;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final expenseTitle = titleController.text.trim();
+                final expenseAmount =
+                    double.tryParse(amountController.text.trim()) ?? 0;
+
+                if (expenseTitle.isEmpty ||
+                    expenseAmount <= 0 ||
+                    selectedPayers.isEmpty ||
+                    selectedParticipants.isEmpty ||
+                    selectedSplitType == null) {
+                  return;
+                }
+
+                // Calculate splits and contributions (you can extend Unequal later)
+                Map<String, double> splits = {};
+                Map<String, double> contributions = {};
+
+                if (selectedSplitType == "Equally") {
+                  final splitAmount =
+                      expenseAmount / selectedParticipants.length;
+                  for (var p in selectedParticipants) splits[p] = splitAmount;
+
+                  final contributionAmount =
+                      expenseAmount / selectedPayers.length;
+                  for (var p in selectedPayers)
+                    contributions[p] = contributionAmount;
+                }
+
+                // Call Firestore service
+                await firestoreServices.updateExpense(
+                  groupId: group["id"],
+                  expenseId: expenseId,
+                  title: expenseTitle,
+                  amount: expenseAmount,
+                  paidBy: selectedPayers,
+                  participants: selectedParticipants,
+                  splits: splits,
+                  contributions: contributions,
+                  splitType: selectedSplitType as String,
+                );
+
+                Navigator.pop(context);
+              },
+              child: const Text("Update"),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

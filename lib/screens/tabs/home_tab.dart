@@ -31,16 +31,16 @@ class _HomeTabState extends State<HomeTab> {
           final friends = snapshot.data!;
           double total = 0;
 
-          //filter friends based on selected tab
+          // filter friends based on selected tab
           final filtered = friends.where((friend) {
-            final balance = friend['balance'] as num;
+            final balance = (friend['balance'] ?? 0) as num; // ✅ safe fallback
             if (selectedTab == 1) return balance < 0; // I owe
             if (selectedTab == 2) return balance > 0; // Owns me
             return true;
           }).toList();
 
           for (var f in friends) {
-            total += (f['balance'] as num);
+            total += (f['balance'] ?? 0) as num; // ✅ safe fallback
           }
 
           return SafeArea(
@@ -50,21 +50,17 @@ class _HomeTabState extends State<HomeTab> {
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start, // Align texts to the left
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
                         "Summary",
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w500,
-                          color: Colors
-                              .grey, // Optional: make it look like a label
+                          color: Colors.grey,
                         ),
                       ),
-                      const SizedBox(
-                        height: 8,
-                      ), // Spacing between "Summary" and total
+                      const SizedBox(height: 8),
                       Text(
                         "₹${total.toStringAsFixed(2)}",
                         style: const TextStyle(
@@ -75,7 +71,6 @@ class _HomeTabState extends State<HomeTab> {
                     ],
                   ),
                 ),
-
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -85,20 +80,19 @@ class _HomeTabState extends State<HomeTab> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                //Friends List
                 Expanded(
                   child: ListView.builder(
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
                       final friend = filtered[index];
-                      final balance = friend['balance'] as num;
+                      final balance = (friend['balance'] ?? 0) as num; // ✅ safe
+                      final avatarUrl =
+                          friend['avatar'] ?? "default_avatar_url";
                       return ListTile(
-                        title: ListTile(
-                          leading: CircleAvatar(
-                            backgroundImage: NetworkImage(friend['avatar']),
-                          ),
-                          title: Text(friend['name']),
+                        leading: CircleAvatar(
+                          backgroundImage: NetworkImage(avatarUrl),
                         ),
+                        title: Text(friend['name'] ?? "Unknown"),
                         trailing: RichText(
                           text: TextSpan(
                             children: [
@@ -110,7 +104,6 @@ class _HomeTabState extends State<HomeTab> {
                                       : balance < 0
                                       ? Colors.red
                                       : Colors.black,
-
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
                                 ),
