@@ -158,18 +158,44 @@ class FirestoreServices {
       "avatar": newMemberData["avatar"],
     };
 
+    final batch = _fireStore.batch();
+
     // 1️⃣ Add member to group's members array
-    await groupDoc.update({
+    batch.update(groupDoc, {
       "members": FieldValue.arrayUnion([newMemberInfo]),
     });
 
     // 2️⃣ Add groupId to new member's groups array
-    await newMemberDoc.update({
+    batch.update(newMemberDoc, {
       "groups": FieldValue.arrayUnion([groupId]),
     });
 
+    // 3️⃣ Add new member as a friend to all existing group members (bidirectional)
+    final members = List<Map<String, dynamic>>.from(groupData["members"] ?? []);
+
+    for (final member in members) {
+      final memberPhone = member["phoneNumber"];
+      final memberDoc = _fireStore.collection("users").doc(memberPhone);
+
+      // Add newMember to existing member’s friends
+      batch.set(
+        memberDoc.collection("friends").doc(newMemberPhoneNumber),
+        newMemberInfo,
+      );
+
+      // Add existing member to newMember’s friends
+      batch.set(newMemberDoc.collection("friends").doc(memberPhone), {
+        "phoneNumber": member["phoneNumber"],
+        "name": member["name"],
+        "avatar": member["avatar"],
+      });
+    }
+
+    // Commit all updates
+    await batch.commit();
+
     print(
-      "${newMemberData["name"]} added to group '${groupData["groupName"]}'",
+      "${newMemberData["name"]} added to group '${groupData["groupName"]}' and bidirectional friendships created",
     );
   }
 
@@ -180,109 +206,118 @@ class FirestoreServices {
     if (phone == null) {
       throw Exception("No user logged in");
     }
-    final userDoc = _fireStore.collection("users").doc(phone);
 
-    return userDoc.snapshots().map((snapshot) {
-      if (!snapshot.exists) return [];
-      final friends = snapshot.data()?["friends"] as List<dynamic>?;
-      return friends != null
-          ? friends.map((e) => Map<String, dynamic>.from(e)).toList()
-          : [];
+    final friendsCollection = _fireStore
+        .collection("users")
+        .doc(phone)
+        .collection("friends");
+
+    return friendsCollection.snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          "id": doc.id, // doc.id is the friend’s phone number
+          ...data, // spread Firestore document data
+        };
+      }).toList();
     });
   }
 
   //adds expence to a group and updates balances for each member
-  Future<void> addExpenseToGroup({
-    required String groupName,
+  Future<void> addExpense({
+    required String groupId,
     required String title,
     required double amount,
     required List<String> paidBy,
     required List<String> participants,
     required Map<String, double> splits,
     required Map<String, double> contributions,
-    required String splitType, //equally | unequally
+    required String splitType,
   }) async {
     final batch = _fireStore.batch();
 
-    try {
-      //prepare expense data
-      final expenseRef = _fireStore.collection("tmp").doc(); //just for id
-      final expenseId = expenseRef.id;
+    // 1️⃣ Add expense to group
+    final expenseRef = _fireStore
+        .collection("groups")
+        .doc(groupId)
+        .collection("expenses")
+        .doc();
 
-      final expenseData = {
-        "id": expenseId,
-        "title": title,
-        "amount": amount,
-        "paidBy": paidBy,
-        "participants": participants,
-        "contributions": contributions,
-        "splits": splits,
-        "splitType": splitType,
-        "createdAt": FieldValue.serverTimestamp(),
-      };
-      for (final member in participants) {
-        final expenseDocRef = _fireStore
+    batch.set(expenseRef, {
+      "title": title,
+      "amount": amount,
+      "paidBy": paidBy,
+      "participants": participants,
+      "splits": splits,
+      "contributions": contributions,
+      "splitType": splitType,
+      "createdAt": FieldValue.serverTimestamp(),
+    });
+
+    // 2️⃣ Update balances for each participant
+    for (final user in participants) {
+      final net = (contributions[user] ?? 0) - (splits[user] ?? 0);
+
+      for (final other in participants) {
+        if (user == other) continue;
+
+        // update user -> other balance
+        final userFriendRef = _fireStore
             .collection("users")
-            .doc(member)
-            .collection("groups")
-            .doc(groupName)
-            .collection("expenses")
-            .doc(expenseId);
+            .doc(user)
+            .collection("friends")
+            .doc(other);
 
-        batch.set(expenseDocRef, expenseData);
+        batch.set(userFriendRef, {
+          "balance": FieldValue.increment(net),
+          "updatedAt": FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
 
-        //optional also update group's lastupdated field
-        final groupDocRef = _fireStore
+        // update other -> user balance (inverse)
+        final otherFriendRef = _fireStore
             .collection("users")
-            .doc(member)
-            .collection("groups")
-            .doc(groupName);
-        batch.set(groupDocRef, {
-          "lastExpense": {
-            "title": title,
-            "amount": amount,
-            "createdAt": FieldValue.serverTimestamp(),
-          },
+            .doc(other)
+            .collection("friends")
+            .doc(user);
+
+        batch.set(otherFriendRef, {
+          "balance": FieldValue.increment(-net),
           "updatedAt": FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       }
-
-      //step 2 update balance inside friends subcollection
-      for (final participant in participants) {
-        final owed = splits[participant] ?? 0;
-        for (final payer in paidBy) {
-          if (participant == payer) continue;
-          final paidShare = (contributions[payer] ?? 0) * (owed / amount);
-
-          final payerFriendRef = _fireStore
-              .collection("users")
-              .doc(payer)
-              .collection("friends")
-              .doc(participant);
-
-          final participantFriendRef = _fireStore
-              .collection("users")
-              .doc(participant)
-              .collection("friends")
-              .doc(payer);
-
-          //payer side (+balance)
-          batch.set(payerFriendRef, {
-            "phoneNumber": participant,
-            "balance": FieldValue.increment(paidShare),
-          }, SetOptions(merge: true));
-
-          //participant side (-balance)
-          batch.set(participantFriendRef, {
-            "phoneNumber": payer,
-            "balance": FieldValue.increment(-paidShare),
-          }, SetOptions(merge: true));
-        }
-      }
-      //Step 3 commit
-      await batch.commit();
-    } catch (e) {
-      rethrow;
     }
+
+    await batch.commit();
+  }
+
+  Future<void> updateExpense({
+    required String groupId,
+    required String expenseId,
+    required String title,
+    required double amount,
+    required List<String> paidBy,
+    required List<String> participants,
+    required Map<String, double> splits,
+    required Map<String, double> contributions,
+    required String splitType,
+  }) async {
+    final expenseRef = _fireStore
+        .collection("groups")
+        .doc(groupId)
+        .collection("expenses")
+        .doc(expenseId);
+
+    await expenseRef.update({
+      "title": title,
+      "amount": amount,
+      "paidBy": paidBy,
+      "participants": participants,
+      "splits": splits,
+      "contributions": contributions,
+      "splitType": splitType,
+      "updatedAt": FieldValue.serverTimestamp(),
+    });
+
+    // Optionally, you can also update balances here if needed
   }
 }
