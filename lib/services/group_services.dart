@@ -33,8 +33,27 @@ class GroupService {
     });
   }
 
+  Stream<int> streamExpenseCount(String groupId) {
+    return _firestore
+        .collection("groups")
+        .doc(groupId)
+        .collection("expenses")
+        .snapshots()
+        .map((snapshot) => snapshot.size);
+  }
+
   /// Get the balance of the current user in a group
   double getUserBalanceInGroup(Map<String, dynamic> group) {
+    final members = group["members"] as List<dynamic>? ?? [];
+    for (var member in members) {
+      if (member["phoneNumber"] == currentUserPhone) {
+        return (member["balance"] ?? 0.0).toDouble();
+      }
+    }
+    return 0.0;
+  }
+
+  double getMyBalance(Map<String, dynamic> group) {
     final members = group["members"] as List<dynamic>? ?? [];
     for (var member in members) {
       if (member["phoneNumber"] == currentUserPhone) {

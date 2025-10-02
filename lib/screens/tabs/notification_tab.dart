@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:split_easy/constants.dart';
 import 'package:timeago/timeago.dart' as timeago;
-import 'package:async/async.dart'; // For StreamGroup.merge
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -16,6 +15,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
   final currentUserPhone = FirebaseAuth.instance.currentUser?.phoneNumber ?? "";
   List<DocumentSnapshot> userGroups = [];
   bool isLoading = true;
+
+  // 👇 moved here instead of inside build
+  String selectedFilter = "all"; // all, expenses, group, settlements
 
   @override
   void initState() {
@@ -35,6 +37,32 @@ class _NotificationScreenState extends State<NotificationScreen> {
       userGroups = snap.docs;
       isLoading = false;
     });
+  }
+
+  Future<List<DocumentSnapshot>> _fetchAllActivities() async {
+    List<DocumentSnapshot> allActivities = [];
+
+    for (var group in userGroups) {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('groups')
+          .doc(group.id)
+          .collection('activities')
+          .orderBy('timestamp', descending: true)
+          .limit(50)
+          .get();
+
+      allActivities.addAll(snapshot.docs);
+    }
+
+    // Sort all activities by timestamp
+    allActivities.sort((a, b) {
+      final aTime = (a['timestamp'] as Timestamp?)?.toDate();
+      final bTime = (b['timestamp'] as Timestamp?)?.toDate();
+      if (aTime == null || bTime == null) return 0;
+      return bTime.compareTo(aTime);
+    });
+
+    return allActivities;
   }
 
   @override
@@ -79,39 +107,41 @@ class _NotificationScreenState extends State<NotificationScreen> {
       );
     }
 
-    // Merge streams of all group activities
-    final List<Stream<QuerySnapshot>> activityStreams = userGroups.map((group) {
-      return FirebaseFirestore.instance
-          .collection('groups')
-          .doc(group.id)
-          .collection('activities')
-          .orderBy('timestamp', descending: true)
-          .snapshots();
-    }).toList();
-
-    final mergedStream = StreamGroup.merge(activityStreams);
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Activity Feed'),
-        backgroundColor: primary,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        elevation: 2,
+        toolbarHeight: 70, // slightly taller
+        centerTitle: true,
+        title: const Text(
+          'Activity Feed',
+          style: TextStyle(
+            fontSize: 24, // 👈 bigger title
+            fontWeight: FontWeight.bold,
+            color: primary, // 👈 use your primary color
+            letterSpacing: 1.1,
+          ),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () => _showFilterOptions(context),
-            tooltip: 'Filter',
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: IconButton(
+              icon: const Icon(Icons.filter_list, color: primary, size: 28),
+              onPressed: () => _showFilterOptions(context),
+              tooltip: 'Filter',
+            ),
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: mergedStream,
+
+      body: FutureBuilder<List<DocumentSnapshot>>(
+        future: _fetchAllActivities(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -136,7 +166,25 @@ class _NotificationScreenState extends State<NotificationScreen> {
             );
           }
 
-          final activities = snapshot.data!.docs;
+          // Apply filter BEFORE grouping
+          List<DocumentSnapshot> activities = snapshot.data!;
+
+          activities = activities.where((activity) {
+            final type = activity['type'] ?? '';
+            switch (selectedFilter) {
+              case "expenses":
+                return type.startsWith("ActivityType.expense");
+              case "group":
+                return type == "ActivityType.groupCreated" ||
+                    type == "ActivityType.groupUpdated" ||
+                    type == "ActivityType.memberAdded" ||
+                    type == "ActivityType.memberRemoved";
+              case "settlements":
+                return type == "ActivityType.settlementRecorded";
+              default:
+                return true; // all
+            }
+          }).toList();
 
           // Group activities by date
           Map<String, List<DocumentSnapshot>> groupedActivities = {};
@@ -149,33 +197,38 @@ class _NotificationScreenState extends State<NotificationScreen> {
             groupedActivities[dateKey]!.add(activity);
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: groupedActivities.length,
-            itemBuilder: (context, index) {
-              final dateKey = groupedActivities.keys.elementAt(index);
-              final dateActivities = groupedActivities[dateKey]!;
+          return RefreshIndicator(
+            onRefresh: () async {
+              setState(() {}); // Trigger rebuild to refetch
+            },
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: groupedActivities.length,
+              itemBuilder: (context, index) {
+                final dateKey = groupedActivities.keys.elementAt(index);
+                final dateActivities = groupedActivities[dateKey]!;
 
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Text(
-                      dateKey,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade700,
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Text(
+                        dateKey,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade700,
+                        ),
                       ),
                     ),
-                  ),
-                  ...dateActivities.map(
-                    (activity) => _buildActivityTile(activity),
-                  ),
-                ],
-              );
-            },
+                    ...dateActivities.map(
+                      (activity) => _buildActivityTile(activity),
+                    ),
+                  ],
+                );
+              },
+            ),
           );
         },
       ),
@@ -355,22 +408,34 @@ class _NotificationScreenState extends State<NotificationScreen> {
             ListTile(
               leading: const Icon(Icons.all_inbox),
               title: const Text('All Activities'),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                setState(() => selectedFilter = "all");
+                Navigator.pop(context);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.add_circle),
               title: const Text('Expenses Only'),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                setState(() => selectedFilter = "expenses");
+                Navigator.pop(context);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.people),
               title: const Text('Group Activities'),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                setState(() => selectedFilter = "group");
+                Navigator.pop(context);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.check_circle),
               title: const Text('Settlements'),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                setState(() => selectedFilter = "settlements");
+                Navigator.pop(context);
+              },
             ),
           ],
         ),

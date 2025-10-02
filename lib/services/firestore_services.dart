@@ -153,11 +153,16 @@ class FirestoreServices {
   Future<void> addMemberToGroup({
     required String groupId,
     required String newMemberPhoneNumber,
+    required String addedByPhoneNumber,
   }) async {
     final groupDoc = _fireStore.collection("groups").doc(groupId);
     final newMemberDoc = _fireStore
         .collection("users")
         .doc(newMemberPhoneNumber);
+
+    final addedByMemberDoc = _fireStore
+        .collection("users")
+        .doc(addedByPhoneNumber);
 
     // Get group data
     final groupSnapshot = await groupDoc.get();
@@ -169,9 +174,19 @@ class FirestoreServices {
 
     // Get new member data
     final newMemberSnapshot = await newMemberDoc.get();
+    final addedByMemberSnapshot = await addedByMemberDoc.get();
+    final addedByMemberData = addedByMemberSnapshot.exists
+        ? addedByMemberSnapshot.data()!
+        : {"name": "Unknown", "avatar": "default_avatar_url"};
+
     final newMemberData = newMemberSnapshot.exists
         ? newMemberSnapshot.data()!
-        : {"name": "Unknown", "avatar": "default_avatar_url"};
+        : {"phoneNumber": "Not_Found", "name": "Unknown"};
+
+    final addedByMemberInfo = {
+      "phoneNumber": addedByPhoneNumber,
+      "name": addedByMemberData["name"],
+    };
 
     final newMemberInfo = {
       "phoneNumber": newMemberPhoneNumber,
@@ -218,8 +233,14 @@ class FirestoreServices {
     // Commit all updates
     await batch.commit();
 
-    print(
-      "${newMemberData["name"]} added to group '${groupData["groupName"]}' and bidirectional friendships created",
+    // Member added activity
+    _activityService.memberAddedActivity(
+      groupId: groupId,
+      groupName: groupData["groupName"],
+      addedByPhone: addedByMemberInfo["phoneNumber"],
+      addedByName: addedByMemberInfo["name"],
+      newMemberPhone: newMemberPhoneNumber,
+      newMemberName: newMemberData["name"],
     );
   }
 

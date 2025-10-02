@@ -30,58 +30,171 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            CircleAvatar(
-              backgroundColor: primary,
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [primary, primary.withOpacity(0.7)],
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
               child: Icon(
                 color: white,
                 getPurposeIcon(widget.group["purpose"]),
+                size: 24,
               ),
             ),
-            const SizedBox(width: 10),
-            Text(
-              widget.group["groupName"] ?? "Group",
-              style: TextStyle(color: primary, fontWeight: FontWeight.bold),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.group["groupName"] ?? "Group",
+                    style: const TextStyle(
+                      color: primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                  Text(
+                    widget.group["purpose"] ?? "",
+                    style: TextStyle(
+                      color: primary.withOpacity(0.7),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
       body: Column(
         children: [
+          // Group Summary Card
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection("groups")
+                .doc(groupId)
+                .collection("expenses")
+                .snapshots(),
+            builder: (context, expenseSnapshot) {
+              final expenseCount = expenseSnapshot.data?.docs.length ?? 0;
+              final memberCount =
+                  (widget.group["members"] as List?)?.length ?? 0;
+
+              // Calculate total amount
+              double totalAmount = 0;
+              if (expenseSnapshot.hasData) {
+                for (var doc in expenseSnapshot.data!.docs) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  totalAmount += (data["amount"]?.toDouble() ?? 0);
+                }
+              }
+
+              return Container(
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      primary.withOpacity(0.1),
+                      secondary.withOpacity(0.05),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: primary.withOpacity(0.2),
+                    width: 1.5,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _summaryItem(
+                          Icons.people,
+                          "$memberCount",
+                          "Members",
+                          Colors.blue,
+                        ),
+                        Container(
+                          width: 1,
+                          height: 40,
+                          color: Colors.grey.shade300,
+                        ),
+                        _summaryItem(
+                          Icons.receipt_long,
+                          "$expenseCount",
+                          "Expenses",
+                          Colors.orange,
+                        ),
+                        Container(
+                          width: 1,
+                          height: 40,
+                          color: Colors.grey.shade300,
+                        ),
+                        _summaryItem(
+                          Icons.currency_rupee,
+                          totalAmount.toStringAsFixed(0),
+                          "Total Spent",
+                          Colors.green,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+
           // Action buttons
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _roundButton(
+                  _actionCard(
                     icon: Icons.person_add,
                     label: "Add Member",
+                    color: Colors.blue,
                     onPressed: () => _showAddMemberDialog(context),
                   ),
-                  const SizedBox(width: 20),
-                  _roundButton(
+                  const SizedBox(width: 12),
+                  _actionCard(
                     icon: Icons.attach_money,
                     label: "Add Expense",
+                    color: Colors.green,
                     onPressed: () =>
                         _showAddExpenseDialog(context, widget.group),
                   ),
-                  const SizedBox(width: 20),
-                  _roundButton(
+                  const SizedBox(width: 12),
+                  _actionCard(
                     icon: Icons.group,
-                    label: "Members",
+                    label: "View Members",
+                    color: Colors.purple,
                     onPressed: () => _showMembersDialog(context, widget.group),
                   ),
-                  const SizedBox(width: 20),
-                  _roundButton(
-                    icon: Icons.summarize,
-                    label: "Totals",
+                  const SizedBox(width: 12),
+                  _actionCard(
+                    icon: Icons.account_balance,
+                    label: "Settlement",
+                    color: Colors.orange,
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => Scaffold(
-                            appBar: AppBar(title: const Text("Settlement")),
+                            appBar: AppBar(
+                              title: const Text("Settlement"),
+                              backgroundColor: primary,
+                              foregroundColor: Colors.white,
+                            ),
                             body: GroupSettlementWidget(
                               group: widget.group,
                               currentUserPhone:
@@ -98,7 +211,57 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
             ),
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+
+          // Section Header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              children: [
+                const Icon(Icons.history, color: primary, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  "Recent Expenses",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: primary,
+                  ),
+                ),
+                const Spacer(),
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection("groups")
+                      .doc(groupId)
+                      .collection("expenses")
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    final count = snapshot.data?.docs.length ?? 0;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        "$count total",
+                        style: const TextStyle(
+                          color: primary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
 
           // Expenses List
           Expanded(
@@ -115,16 +278,35 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                 }
 
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      "No expenses yet",
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.receipt_long_outlined,
+                          size: 80,
+                          color: Colors.grey.shade300,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          "No expenses yet",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          "Add your first expense to get started!",
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                      ],
                     ),
                   );
                 }
 
                 final expenses = snapshot.data!.docs;
-
                 final members = (widget.group["members"] as List<dynamic>)
                     .map((e) => e as Map<String, dynamic>)
                     .toList();
@@ -139,8 +321,31 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
 
                     final title = expense["title"] ?? "";
                     final amount = expense["amount"]?.toDouble() ?? 0;
+                    final createdAt = expense["createdAt"];
 
-                    // Get paidBy and participants as Map<String, double>
+                    // Get date
+                    String getExpenseDate() {
+                      if (createdAt == null) return "";
+                      try {
+                        final DateTime created = (createdAt as dynamic)
+                            .toDate();
+                        final now = DateTime.now();
+                        final difference = now.difference(created);
+
+                        if (difference.inDays == 0) {
+                          return "Today";
+                        } else if (difference.inDays == 1) {
+                          return "Yesterday";
+                        } else if (difference.inDays < 7) {
+                          return "${difference.inDays} days ago";
+                        } else {
+                          return "${created.day}/${created.month}/${created.year}";
+                        }
+                      } catch (e) {
+                        return "";
+                      }
+                    }
+
                     final paidByMap = Map<String, double>.from(
                       expense["paidBy"] ?? {},
                     );
@@ -148,7 +353,6 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                       expense["participants"] ?? {},
                     );
 
-                    // Build member info with amounts
                     Widget buildMemberChips(
                       Map<String, double> memberAmounts,
                       Color chipColor,
@@ -162,7 +366,6 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                           final phoneNumber = entry.key;
                           final memberAmount = entry.value;
 
-                          // Find member info
                           final member = members.firstWhere(
                             (m) => m["phoneNumber"] == phoneNumber,
                             orElse: () => {"name": phoneNumber, "avatar": ""},
@@ -176,7 +379,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                                       member["avatar"] != ""
                                   ? NetworkImage(member["avatar"])
                                   : const AssetImage(
-                                          "assets/default_avatar.png",
+                                          "images/default_avatar.png",
                                         )
                                         as ImageProvider,
                             ),
@@ -197,205 +400,289 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
 
                     return Card(
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      elevation: 3,
-                      margin: const EdgeInsets.symmetric(vertical: 6),
-                      child: ExpansionTile(
-                        tilePadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        title: Row(
-                          children: [
-                            const Icon(
-                              Icons.receipt_long,
-                              size: 20,
-                              color: Colors.blue,
+                      elevation: 2,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: Theme(
+                        data: Theme.of(
+                          context,
+                        ).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          tilePadding: const EdgeInsets.all(16),
+                          childrenPadding: const EdgeInsets.fromLTRB(
+                            16,
+                            0,
+                            16,
+                            16,
+                          ),
+                          leading: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.blue.shade400,
+                                  Colors.blue.shade600,
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                title,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                            child: const Icon(
+                              Icons.receipt,
+                              color: Colors.white,
+                              size: 24,
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: Colors.green.shade200,
-                                ),
-                              ),
-                              child: Text(
-                                "₹${amount.toStringAsFixed(2)}",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green.shade700,
-                                  fontSize: 14,
-                                ),
-                              ),
+                          ),
+                          title: Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                             ),
-                          ],
-                        ),
-                        childrenPadding: const EdgeInsets.all(16),
-                        children: [
-                          // Paid By Section
-                          if (paidByMap.isNotEmpty) ...[
-                            Row(
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Row(
                               children: [
                                 Icon(
-                                  Icons.account_balance_wallet,
-                                  size: 18,
-                                  color: Colors.green.shade700,
+                                  Icons.calendar_today,
+                                  size: 12,
+                                  color: Colors.grey.shade600,
                                 ),
-                                const SizedBox(width: 6),
-                                const Text(
-                                  "Paid By:",
+                                const SizedBox(width: 4),
+                                Text(
+                                  getExpenseDate(),
                                   style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14,
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
                                   ),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            buildMemberChips(paidByMap, Colors.green.shade50),
-                            const SizedBox(height: 16),
-                          ],
-
-                          // Participants Section
-                          if (participantsMap.isNotEmpty) ...[
-                            Row(
-                              children: [
+                                const SizedBox(width: 12),
                                 Icon(
                                   Icons.people,
-                                  size: 18,
-                                  color: Colors.orange.shade700,
+                                  size: 12,
+                                  color: Colors.grey.shade600,
                                 ),
-                                const SizedBox(width: 6),
-                                const Text(
-                                  "Split Between:",
+                                const SizedBox(width: 4),
+                                Text(
+                                  "${participantsMap.length} people",
                                   style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14,
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            buildMemberChips(
-                              participantsMap,
-                              Colors.orange.shade50,
+                          ),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
                             ),
-                            const SizedBox(height: 16),
-                          ],
-
-                          const Divider(),
-                          const SizedBox(height: 8),
-
-                          // Action buttons
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              TextButton.icon(
-                                onPressed: () {
-                                  // Open edit dialog
-                                  _showEditExpenseDialog(
-                                    context,
-                                    expenseId,
-                                    expense,
-                                    widget.group,
-                                  );
-                                },
-                                icon: const Icon(Icons.edit, size: 18),
-                                label: const Text("Edit"),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Colors.blue,
-                                ),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.green.shade50,
+                                  Colors.green.shade100,
+                                ],
                               ),
-                              const SizedBox(width: 8),
-                              TextButton.icon(
-                                onPressed: () async {
-                                  // Delete expense with confirmation
-                                  final confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (_) => AlertDialog(
-                                      title: const Text("Delete Expense?"),
-                                      content: Text(
-                                        "Are you sure you want to delete '$title'?\n\nNote: This will reverse the balance changes.",
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context, false),
-                                          child: const Text("Cancel"),
-                                        ),
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context, true),
-                                          child: const Text(
-                                            "Delete",
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                        ),
-                                      ],
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.green.shade300),
+                            ),
+                            child: Text(
+                              "₹${amount.toStringAsFixed(2)}",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade700,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                          children: [
+                            const Divider(),
+                            const SizedBox(height: 8),
+
+                            // Paid By Section
+                            if (paidByMap.isNotEmpty) ...[
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade100,
+                                      borderRadius: BorderRadius.circular(8),
                                     ),
-                                  );
+                                    child: Icon(
+                                      Icons.account_balance_wallet,
+                                      size: 18,
+                                      color: Colors.green.shade700,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    "Paid By:",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              buildMemberChips(paidByMap, Colors.green.shade50),
+                              const SizedBox(height: 16),
+                            ],
 
-                                  if (confirm == true) {
-                                    try {
-                                      // Call delete function that reverses balances
-                                      await firestoreServices.deleteExpense(
-                                        groupId: groupId,
-                                        expenseId: expenseId,
-                                        paidBy: paidByMap,
-                                        participants: participantsMap,
-                                      );
+                            // Participants Section
+                            if (participantsMap.isNotEmpty) ...[
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.shade100,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      Icons.people,
+                                      size: 18,
+                                      color: Colors.orange.shade700,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    "Split Between:",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              buildMemberChips(
+                                participantsMap,
+                                Colors.orange.shade50,
+                              ),
+                              const SizedBox(height: 16),
+                            ],
 
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Expense deleted successfully',
+                            const Divider(),
+                            const SizedBox(height: 8),
+
+                            // Action buttons
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: () {
+                                    _showEditExpenseDialog(
+                                      context,
+                                      expenseId,
+                                      expense,
+                                      widget.group,
+                                    );
+                                  },
+                                  icon: const Icon(Icons.edit, size: 18),
+                                  label: const Text("Edit"),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.blue,
+                                    side: BorderSide(
+                                      color: Colors.blue.shade300,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                OutlinedButton.icon(
+                                  onPressed: () async {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (_) => AlertDialog(
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                        ),
+                                        title: const Row(
+                                          children: [
+                                            Icon(
+                                              Icons.warning_amber_rounded,
+                                              color: Colors.orange,
                                             ),
-                                            backgroundColor: Colors.green,
+                                            SizedBox(width: 8),
+                                            Text("Delete Expense?"),
+                                          ],
+                                        ),
+                                        content: Text(
+                                          "Are you sure you want to delete '$title'?\n\nThis will reverse all balance changes.",
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context, false),
+                                            child: const Text("Cancel"),
                                           ),
-                                        );
-                                      }
-                                    } catch (e) {
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Error: $e'),
-                                            backgroundColor: Colors.red,
+                                          ElevatedButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context, true),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.red,
+                                              foregroundColor: Colors.white,
+                                            ),
+                                            child: const Text("Delete"),
                                           ),
+                                        ],
+                                      ),
+                                    );
+
+                                    if (confirm == true) {
+                                      try {
+                                        await firestoreServices.deleteExpense(
+                                          groupId: groupId,
+                                          expenseId: expenseId,
+                                          paidBy: paidByMap,
+                                          participants: participantsMap,
                                         );
+
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Expense deleted successfully',
+                                              ),
+                                              backgroundColor: Colors.green,
+                                            ),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Error: $e'),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                        }
                                       }
                                     }
-                                  }
-                                },
-                                icon: const Icon(Icons.delete, size: 18),
-                                label: const Text("Delete"),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Colors.red,
+                                  },
+                                  icon: const Icon(Icons.delete, size: 18),
+                                  label: const Text("Delete"),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.red,
+                                    side: BorderSide(
+                                      color: Colors.red.shade300,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -404,6 +691,70 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _summaryItem(IconData icon, String value, String label, Color color) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 24),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+      ],
+    );
+  }
+
+  Widget _actionCard({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -492,12 +843,13 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
           ElevatedButton(
             onPressed: () async {
               final newMember = '+91${controller.text.trim()}';
+              final whoAdded = authServices.currentUser?.phoneNumber;
               if (newMember.isNotEmpty) {
                 await firestoreServices.addMemberToGroup(
                   groupId: widget.group["id"],
                   newMemberPhoneNumber: newMember,
+                  addedByPhoneNumber: whoAdded as String,
                 );
-                debugPrint("New Member: $newMember");
               }
               // ignore: use_build_context_synchronously
               Navigator.pop(context);
