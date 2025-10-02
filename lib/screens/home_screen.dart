@@ -44,7 +44,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        actions: [IconButton(icon: const Icon(Icons.search), onPressed: () {})],
       ),
       body: _pages[_selectedIndex], // Show current tab page
       bottomNavigationBar: BottomNavigationBar(

@@ -21,6 +21,8 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     {"label": "Group", "icon": Icons.group},
     {"label": "Family", "icon": Icons.family_restroom},
     {"label": "Couple", "icon": Icons.favorite},
+    {"label": "Home", "icon": Icons.home_filled},
+    {"label": "Event", "icon": Icons.event},
     {"label": "Others", "icon": Icons.widgets},
   ];
 
