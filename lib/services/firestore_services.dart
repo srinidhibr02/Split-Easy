@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
+import 'package:split_easy/services/activity_service.dart';
 
 class FirestoreServices {
   final FirebaseFirestore _fireStore = FirebaseFirestore.instance;
+  final ActivityService _activityService = ActivityService();
+
   final _auth = FirebaseAuth.instance;
 
   String? get currentPhoneNumber => _auth.currentUser?.phoneNumber;
@@ -69,6 +71,20 @@ class FirestoreServices {
     final userName = userData["name"] ?? "Unknown";
     final userAvatar = userData["avatar"] ?? "default_avatar_url";
 
+    // Define initial members list
+    final members = [
+      {
+        "phoneNumber": currentPhoneNumber,
+        "name": userName,
+        "avatar": userAvatar,
+      },
+    ];
+
+    // Extract only phone numbers for fast querying
+    final memberPhones = members
+        .map((m) => m["phoneNumber"] as String)
+        .toList();
+
     // Create a new group in the global 'groups' collection
     final newGroupDoc = await _fireStore.collection("groups").add({
       "groupName": groupName,
@@ -79,13 +95,8 @@ class FirestoreServices {
         "name": userName,
         "avatar": userAvatar,
       },
-      "members": [
-        {
-          "phoneNumber": currentPhoneNumber,
-          "name": userName,
-          "avatar": userAvatar,
-        },
-      ],
+      "members": members,
+      "memberPhones": memberPhones, // <-- added for easier queries
     });
 
     final groupId = newGroupDoc.id;
@@ -96,36 +107,46 @@ class FirestoreServices {
     });
 
     print("Group '$groupName' created successfully with ID: $groupId");
+
+    _activityService.createGroupActivity(
+      groupId: groupId,
+      groupName: groupName,
+      creatorPhone: currentPhoneNumber as String,
+      creatorName: userName,
+    );
   }
 
-  Stream<Map<String, dynamic>?> streamGroupById(String groupId) {
-    return _fireStore.collection("groups").doc(groupId).snapshots().map((
-      snapshot,
-    ) {
-      if (!snapshot.exists) return null;
-      return {"id": snapshot.id, ...snapshot.data()!};
-    });
+  Stream<DocumentSnapshot<Map<String, dynamic>>> streamGroupById(
+    String groupId,
+  ) {
+    return _fireStore.collection("groups").doc(groupId).snapshots();
   }
 
   Stream<List<Map<String, dynamic>>> streamUserGroups(User user) {
     final userDoc = _fireStore.collection("users").doc(user.phoneNumber);
 
-    return userDoc.snapshots().asyncMap((snapshot) async {
-      if (!snapshot.exists) return [];
+    return userDoc.snapshots().asyncExpand((snapshot) {
+      if (!snapshot.exists) return Stream.value([]);
 
       final groupIds = List<String>.from(snapshot.data()?["groups"] ?? []);
 
-      if (groupIds.isEmpty) return [];
+      if (groupIds.isEmpty) return Stream.value([]);
 
-      // Fetch all group documents for these IDs
-      final groupsQuery = await _fireStore
+      // Listen to changes in all group documents
+      return _fireStore
           .collection("groups")
           .where(FieldPath.documentId, whereIn: groupIds)
-          .get();
-
-      return groupsQuery.docs
-          .map((doc) => {"id": doc.id, ...doc.data()})
-          .toList();
+          .snapshots()
+          .map((query) {
+            return query.docs
+                .map(
+                  (doc) => {
+                    "id": doc.id,
+                    ...doc.data() as Map<String, dynamic>,
+                  },
+                )
+                .toList();
+          });
     });
   }
 
@@ -163,6 +184,9 @@ class FirestoreServices {
     // 1️⃣ Add member to group's members array
     batch.update(groupDoc, {
       "members": FieldValue.arrayUnion([newMemberInfo]),
+      "memberPhones": FieldValue.arrayUnion([
+        newMemberPhoneNumber,
+      ]), // <-- update memberPhones
     });
 
     // 2️⃣ Add groupId to new member's groups array
@@ -228,96 +252,249 @@ class FirestoreServices {
     required String groupId,
     required String title,
     required double amount,
-    required List<String> paidBy,
-    required List<String> participants,
-    required Map<String, double> splits,
-    required Map<String, double> contributions,
-    required String splitType,
+    required Map<String, double> paidBy,
+    required Map<String, double> participants,
   }) async {
-    final batch = _fireStore.batch();
+    try {
+      // Prepare expense data
+      var expenseData = {
+        "title": title,
+        "amount": amount,
+        "paidBy": paidBy,
+        "participants": participants,
+        "createdAt": FieldValue.serverTimestamp(),
+      };
 
-    // 1️⃣ Add expense to group
-    final expenseRef = _fireStore
-        .collection("groups")
-        .doc(groupId)
-        .collection("expenses")
-        .doc();
+      // Use a batch write to ensure atomicity
+      WriteBatch batch = _fireStore.batch();
 
-    batch.set(expenseRef, {
-      "title": title,
-      "amount": amount,
-      "paidBy": paidBy,
-      "participants": participants,
-      "splits": splits,
-      "contributions": contributions,
-      "splitType": splitType,
-      "createdAt": FieldValue.serverTimestamp(),
-    });
+      // 1. Add the expense document
+      DocumentReference expenseRef = _fireStore
+          .collection('groups')
+          .doc(groupId)
+          .collection('expenses')
+          .doc(); // Creates a new document reference with auto-generated ID
 
-    // 2️⃣ Update balances for each participant
-    for (final user in participants) {
-      final net = (contributions[user] ?? 0) - (splits[user] ?? 0);
+      batch.set(expenseRef, expenseData);
 
-      for (final other in participants) {
-        if (user == other) continue;
+      // 2. Calculate balances for each member
+      // Balance = Amount paid - Amount owed
+      Map<String, double> balanceChanges = {};
 
-        // update user -> other balance
-        final userFriendRef = _fireStore
-            .collection("users")
-            .doc(user)
-            .collection("friends")
-            .doc(other);
+      // Add amounts paid by each payer
+      paidBy.forEach((phoneNumber, amountPaid) {
+        balanceChanges[phoneNumber] =
+            (balanceChanges[phoneNumber] ?? 0) + amountPaid;
+      });
 
-        batch.set(userFriendRef, {
-          "balance": FieldValue.increment(net),
-          "updatedAt": FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+      // Subtract amounts owed by each participant
+      participants.forEach((phoneNumber, amountOwed) {
+        balanceChanges[phoneNumber] =
+            (balanceChanges[phoneNumber] ?? 0) - amountOwed;
+      });
 
-        // update other -> user balance (inverse)
-        final otherFriendRef = _fireStore
-            .collection("users")
-            .doc(other)
-            .collection("friends")
-            .doc(user);
+      // 3. Update each member's balance in the group document
+      DocumentReference groupRef = _fireStore.collection('groups').doc(groupId);
 
-        batch.set(otherFriendRef, {
-          "balance": FieldValue.increment(-net),
-          "updatedAt": FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
+      balanceChanges.forEach((phoneNumber, balanceChange) {
+        // Update the specific member's balance in the members array
+        batch.update(groupRef, {
+          'members': FieldValue.arrayRemove([
+            // This is a workaround - we'll need to fetch and update properly
+          ]),
+        });
+      });
+
+      // For proper member balance updates, we need to read the current state first
+      DocumentSnapshot groupDoc = await groupRef.get();
+      List<dynamic> members = groupDoc.get('members') ?? [];
+
+      // Update each member's balance
+      List<Map<String, dynamic>> updatedMembers = members.map((member) {
+        Map<String, dynamic> memberMap = Map<String, dynamic>.from(member);
+        String phoneNumber = memberMap['phoneNumber'];
+
+        if (balanceChanges.containsKey(phoneNumber)) {
+          double currentBalance = (memberMap['balance'] ?? 0.0).toDouble();
+          memberMap['balance'] = currentBalance + balanceChanges[phoneNumber]!;
+        }
+
+        return memberMap;
+      }).toList();
+
+      // Update the entire members array
+      batch.update(groupRef, {'members': updatedMembers});
+
+      // 4. Commit the batch
+      await batch.commit();
+
+      print('Expense added successfully and balances updated: $expenseData');
+    } catch (e) {
+      print('Error adding expense: $e');
+      rethrow;
     }
-
-    await batch.commit();
   }
 
-  Future<void> updateExpense({
+  Future<void> editExpense({
     required String groupId,
     required String expenseId,
     required String title,
     required double amount,
-    required List<String> paidBy,
-    required List<String> participants,
-    required Map<String, double> splits,
-    required Map<String, double> contributions,
-    required String splitType,
+    required Map<String, double> paidBy,
+    required Map<String, double> participants,
+    required Map<String, double> oldPaidBy,
+    required Map<String, double> oldParticipants,
   }) async {
-    final expenseRef = _fireStore
-        .collection("groups")
-        .doc(groupId)
-        .collection("expenses")
-        .doc(expenseId);
+    try {
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        // Reference to group document
+        DocumentReference groupRef = FirebaseFirestore.instance
+            .collection('groups')
+            .doc(groupId);
 
-    await expenseRef.update({
-      "title": title,
-      "amount": amount,
-      "paidBy": paidBy,
-      "participants": participants,
-      "splits": splits,
-      "contributions": contributions,
-      "splitType": splitType,
-      "updatedAt": FieldValue.serverTimestamp(),
-    });
+        // Read current group data
+        DocumentSnapshot groupSnapshot = await transaction.get(groupRef);
 
-    // Optionally, you can also update balances here if needed
+        if (!groupSnapshot.exists) {
+          throw Exception('Group not found');
+        }
+
+        List<dynamic> members = groupSnapshot.get('members') ?? [];
+
+        // Step 1: Reverse the old balance changes
+        Map<String, double> balanceChanges = {};
+
+        // Reverse old: subtract amounts that were paid
+        oldPaidBy.forEach((phoneNumber, amountPaid) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) - amountPaid;
+        });
+
+        // Reverse old: add back amounts that were owed
+        oldParticipants.forEach((phoneNumber, amountOwed) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) + amountOwed;
+        });
+
+        // Step 2: Apply the new balance changes
+        // Add new amounts paid by each payer
+        paidBy.forEach((phoneNumber, amountPaid) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) + amountPaid;
+        });
+
+        // Subtract new amounts owed by each participant
+        participants.forEach((phoneNumber, amountOwed) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) - amountOwed;
+        });
+
+        // Update members with net balance changes
+        List<Map<String, dynamic>> updatedMembers = members.map((member) {
+          Map<String, dynamic> memberMap = Map<String, dynamic>.from(member);
+          String phoneNumber = memberMap['phoneNumber'];
+
+          if (balanceChanges.containsKey(phoneNumber)) {
+            double currentBalance = (memberMap['balance'] ?? 0.0).toDouble();
+            memberMap['balance'] =
+                currentBalance + balanceChanges[phoneNumber]!;
+          }
+
+          return memberMap;
+        }).toList();
+
+        // Update expense document
+        DocumentReference expenseRef = groupRef
+            .collection('expenses')
+            .doc(expenseId);
+
+        var expenseData = {
+          "title": title,
+          "amount": amount,
+          "paidBy": paidBy,
+          "participants": participants,
+          "updatedAt": FieldValue.serverTimestamp(),
+        };
+
+        transaction.update(expenseRef, expenseData);
+
+        // Update group with new member balances
+        transaction.update(groupRef, {'members': updatedMembers});
+      });
+
+      print('Expense edited successfully and balances adjusted');
+    } catch (e) {
+      print('Error editing expense: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteExpense({
+    required String groupId,
+    required String expenseId,
+    required Map<String, double> paidBy,
+    required Map<String, double> participants,
+  }) async {
+    try {
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        // Reference to group document
+        DocumentReference groupRef = FirebaseFirestore.instance
+            .collection('groups')
+            .doc(groupId);
+
+        // Read current group data
+        DocumentSnapshot groupSnapshot = await transaction.get(groupRef);
+
+        if (!groupSnapshot.exists) {
+          throw Exception('Group not found');
+        }
+
+        List<dynamic> members = groupSnapshot.get('members') ?? [];
+
+        // Calculate balance changes to REVERSE
+        // When deleting, we reverse the original operation
+        Map<String, double> balanceChanges = {};
+
+        // Reverse: subtract amounts that were paid
+        paidBy.forEach((phoneNumber, amountPaid) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) - amountPaid;
+        });
+
+        // Reverse: add back amounts that were owed
+        participants.forEach((phoneNumber, amountOwed) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) + amountOwed;
+        });
+
+        // Update members with reversed balances
+        List<Map<String, dynamic>> updatedMembers = members.map((member) {
+          Map<String, dynamic> memberMap = Map<String, dynamic>.from(member);
+          String phoneNumber = memberMap['phoneNumber'];
+
+          if (balanceChanges.containsKey(phoneNumber)) {
+            double currentBalance = (memberMap['balance'] ?? 0.0).toDouble();
+            memberMap['balance'] =
+                currentBalance + balanceChanges[phoneNumber]!;
+          }
+
+          return memberMap;
+        }).toList();
+
+        // Delete expense document
+        DocumentReference expenseRef = groupRef
+            .collection('expenses')
+            .doc(expenseId);
+        transaction.delete(expenseRef);
+
+        // Update group with reversed member balances
+        transaction.update(groupRef, {'members': updatedMembers});
+      });
+
+      print('Expense deleted successfully and balances reversed');
+    } catch (e) {
+      print('Error deleting expense: $e');
+      rethrow;
+    }
   }
 }
