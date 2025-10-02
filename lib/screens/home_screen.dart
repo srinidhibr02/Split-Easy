@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:split_easy/constants.dart';
-import 'package:split_easy/screens/tabs/friends_tab.dart';
+import 'package:split_easy/screens/tabs/notification_tab.dart';
 import 'package:split_easy/screens/tabs/group_tab.dart';
 import 'package:split_easy/screens/tabs/home_tab.dart';
 import 'package:split_easy/screens/tabs/profile_tab.dart';
@@ -18,7 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> _pages = [
     HomeTab(),
     GroupTab(),
-    NotifyTab(),
+    NotificationScreen(),
     ProfileTab(),
   ];
 

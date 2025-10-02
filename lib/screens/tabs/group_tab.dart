@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:split_easy/constants.dart';
 import 'package:split_easy/screens/create_group_screen.dart';
@@ -67,7 +68,7 @@ class _GroupTabState extends State<GroupTab> {
             Expanded(
               child: StreamBuilder<List<Map<String, dynamic>>>(
                 stream: _firestoreServices.streamUserGroups(
-                  _authServices.currentUser!,
+                  _authServices.currentUser as User,
                 ),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
