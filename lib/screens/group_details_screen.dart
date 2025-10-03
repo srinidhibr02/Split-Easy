@@ -5,6 +5,8 @@ import 'package:split_easy/screens/settlement.dart';
 import 'package:split_easy/services/auth_services.dart';
 import 'package:split_easy/services/firestore_services.dart';
 import 'package:split_easy/services/group_services.dart';
+import 'package:split_easy/widgets/add_expense_dialog.dart';
+import 'package:split_easy/widgets/add_member_dialog.dart';
 import 'package:split_easy/widgets/member_selection_dialog.dart';
 import '../constants.dart';
 
@@ -173,6 +175,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                     onPressed: () =>
                         _showAddExpenseDialog(context, widget.group),
                   ),
+
                   const SizedBox(width: 12),
                   _actionCard(
                     icon: Icons.group,
@@ -243,7 +246,6 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: primary.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -614,7 +616,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                                           ],
                                         ),
                                         content: Text(
-                                          "Are you sure you want to delete '$title'?\n\nThis will reverse all balance changes.",
+                                          "Are you sure you want to delete '$title' expense?\n\nThis will reverse all balance changes.",
                                         ),
                                         actions: [
                                           TextButton(
@@ -637,9 +639,11 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
 
                                     if (confirm == true) {
                                       try {
-                                        await firestoreServices.deleteExpense(
+                                        groupService.deleteExpenseWithActivity(
                                           groupId: groupId,
                                           expenseId: expenseId,
+                                          expenseTitle: title,
+                                          amount: amount,
                                           paidBy: paidByMap,
                                           participants: participantsMap,
                                         );
@@ -691,6 +695,14 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
             ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          _showAddExpenseDialog(context, widget.group);
+        },
+        backgroundColor: primary,
+        foregroundColor: Colors.white,
+        child: const Icon(Icons.add), // 👈 use child, not key
       ),
     );
   }
@@ -819,335 +831,42 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
 
   // ✅ Add Member Dialog
   void _showAddMemberDialog(BuildContext context) {
-    final controller = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Add Member", style: TextStyle(color: primary)),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.phone,
-          maxLength: 10,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(
-            hintText: "Enter 10-digit phone number",
-            counterText: "",
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel", style: TextStyle(color: primary)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final newMember = '+91${controller.text.trim()}';
-              final whoAdded = authServices.currentUser?.phoneNumber;
-              if (newMember.isNotEmpty) {
-                await firestoreServices.addMemberToGroup(
-                  groupId: widget.group["id"],
-                  newMemberPhoneNumber: newMember,
-                  addedByPhoneNumber: whoAdded as String,
-                );
-              }
-              // ignore: use_build_context_synchronously
-              Navigator.pop(context);
-              ScaffoldMessenger.of(
-                // ignore: use_build_context_synchronously
-                context,
-              ).showSnackBar(const SnackBar(content: Text("Member added")));
-            },
-            child: const Text("Add", style: TextStyle(color: primary)),
-          ),
-        ],
-      ),
+    showAddMemberDialog(
+      context,
+      groupId: widget.group["id"],
+      onAddMember: (phoneNumber) async {
+        final whoAdded = authServices.currentUser?.phoneNumber;
+        await firestoreServices.addMemberToGroup(
+          groupId: widget.group["id"],
+          newMemberPhoneNumber: phoneNumber,
+          addedByPhoneNumber: whoAdded as String,
+        );
+      },
     );
   }
 
   // ✅ Add Expense Dialog
   void _showAddExpenseDialog(BuildContext context, Map<String, dynamic> group) {
-    final titleController = TextEditingController();
-    final amountController = TextEditingController();
-    Map<String, double> selectedPayers = {};
-    Map<String, double> selectedParticipants = {};
-
-    showDialog(
-      context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text("Add Expense"),
-          content: StreamBuilder<DocumentSnapshot>(
-            stream: firestoreServices.streamGroupById(group["id"]),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              final updatedGroup =
-                  snapshot.data!.data() as Map<String, dynamic>? ?? {};
-              final members = (updatedGroup["members"] as List<dynamic>? ?? [])
-                  .map((e) => e as Map<String, dynamic>)
-                  .toList();
-
-              return SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: titleController,
-                      decoration: const InputDecoration(
-                        hintText: "Expense Title",
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: amountController,
-                      decoration: const InputDecoration(hintText: "Amount"),
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 15),
-
-                    // --- Payers Section ---
-                    InkWell(
-                      onTap: () async {
-                        double expAmount =
-                            double.tryParse(amountController.text.trim()) ?? 0;
-                        final result = await showDialog(
-                          context: context,
-                          builder: (_) => MemberSelectionDialog(
-                            members: members,
-                            amount: expAmount,
-                            initialSelected: selectedPayers,
-                          ),
-                        );
-
-                        if (result != null) {
-                          setState(() {
-                            selectedPayers = Map<String, double>.from(result);
-                          });
-                        }
-                      },
-                      child: InputDecorator(
-                        decoration: InputDecoration(
-                          labelText: "Select Payers",
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          suffixIcon: const Icon(Icons.arrow_drop_down),
-                        ),
-                        child: Text(
-                          selectedPayers.isEmpty
-                              ? "Tap to select payers"
-                              : "${selectedPayers.length} payer(s) selected",
-                          style: TextStyle(
-                            color: selectedPayers.isEmpty
-                                ? Colors.grey
-                                : Colors.black,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // --- Show selected payers ---
-                    if (selectedPayers.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue.shade200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "Selected Payers:",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            ...selectedPayers.entries.map((entry) {
-                              final member = members.firstWhere(
-                                (m) => m["phoneNumber"] == entry.key,
-                              );
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 2,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        member["name"],
-                                        style: const TextStyle(fontSize: 14),
-                                      ),
-                                    ),
-                                    Text(
-                                      "₹${entry.value.toStringAsFixed(2)}",
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.green,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 15),
-
-                    // --- Participants Section ---
-                    InkWell(
-                      onTap: () async {
-                        double expAmount =
-                            double.tryParse(amountController.text.trim()) ?? 0;
-                        final result = await showDialog(
-                          context: context,
-                          builder: (_) => MemberSelectionDialog(
-                            members: members,
-                            amount: expAmount,
-                            initialSelected: selectedParticipants,
-                          ),
-                        );
-
-                        if (result != null) {
-                          setState(() {
-                            selectedParticipants = Map<String, double>.from(
-                              result,
-                            );
-                          });
-                        }
-                      },
-                      child: InputDecorator(
-                        decoration: InputDecoration(
-                          labelText: "Select Participants",
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          suffixIcon: const Icon(Icons.arrow_drop_down),
-                        ),
-                        child: Text(
-                          selectedParticipants.isEmpty
-                              ? "Tap to select participants"
-                              : "${selectedParticipants.length} participant(s) selected",
-                          style: TextStyle(
-                            color: selectedParticipants.isEmpty
-                                ? Colors.grey
-                                : Colors.black,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // --- Show selected participants ---
-                    if (selectedParticipants.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.orange.shade200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "Selected Participants:",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            ...selectedParticipants.entries.map((entry) {
-                              final member = members.firstWhere(
-                                (m) => m["phoneNumber"] == entry.key,
-                              );
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 2,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        member["name"],
-                                        style: const TextStyle(fontSize: 14),
-                                      ),
-                                    ),
-                                    Text(
-                                      "₹${entry.value.toStringAsFixed(2)}",
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.deepOrange,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 15),
-                  ],
-                ),
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final expenseTitle = titleController.text.trim();
-                final expenseAmount =
-                    double.tryParse(amountController.text.trim()) ?? 0;
-
-                if (expenseTitle.isEmpty ||
-                    expenseAmount <= 0 ||
-                    selectedPayers.isEmpty ||
-                    selectedParticipants.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please fill all fields')),
-                  );
-                  return;
-                }
-
-                // Firestore service call
-                groupService.addExpenseWithActivity(
-                  groupId: group["id"],
-                  title: expenseTitle,
-                  amount: expenseAmount,
-                  paidBy: selectedPayers,
-                  participants: selectedParticipants,
-                );
-
-                Navigator.pop(context);
-              },
-              child: const Text("Add Expense"),
-            ),
-          ],
-        ),
-      ),
+    showAddExpenseDialog(
+      context,
+      group: group,
+      streamGroupById: firestoreServices.streamGroupById,
+      onAddExpense:
+          ({
+            required String groupId,
+            required String title,
+            required double amount,
+            required Map<String, double> paidBy,
+            required Map<String, double> participants,
+          }) async {
+            await groupService.addExpenseWithActivity(
+              groupId: groupId,
+              title: title,
+              amount: amount,
+              paidBy: paidBy,
+              participants: participants,
+            );
+          },
     );
   }
 
