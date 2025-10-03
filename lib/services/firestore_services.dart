@@ -51,12 +51,26 @@ class FirestoreServices {
     required String avatar,
   }) async {
     if (user == null) return;
+
     final userDoc = _fireStore.collection("users").doc(user.phoneNumber);
-    await userDoc.set({
-      "name": userName,
-      "avatar": avatar,
-      "isProfileCompleted": true,
-    });
+
+    final docSnapshot = await userDoc.get();
+
+    if (docSnapshot.exists) {
+      // ✅ Update only specific fields
+      await userDoc.update({
+        "name": userName,
+        "avatar": avatar,
+        "isProfileCompleted": true,
+      });
+    } else {
+      // ✅ Create new document
+      await userDoc.set({
+        "name": userName,
+        "avatar": avatar,
+        "isProfileCompleted": true,
+      });
+    }
   }
 
   Future<void> createGroup({
