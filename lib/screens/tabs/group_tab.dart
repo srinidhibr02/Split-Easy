@@ -20,7 +20,7 @@ class _GroupTabState extends State<GroupTab> {
   final AuthServices _authServices = AuthServices();
 
   String _searchQuery = "";
-  String _selectedFilter = "All"; // All, Active, Settled
+  final String _selectedFilter = "All"; // All, Active, Settled
 
   IconData getPurposeIcon(String? label) {
     final purpose = purposes.firstWhere(
@@ -87,20 +87,6 @@ class _GroupTabState extends State<GroupTab> {
       ),
       body: Column(
         children: [
-          // Filter Chips
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                _filterChip("All", Icons.grid_view),
-                const SizedBox(width: 8),
-                _filterChip("Active", Icons.trending_up),
-                const SizedBox(width: 8),
-                _filterChip("Settled", Icons.check_circle),
-              ],
-            ),
-          ),
-
           // Groups List
           Expanded(
             child: Padding(
@@ -154,14 +140,6 @@ class _GroupTabState extends State<GroupTab> {
                         purpose.contains(_searchQuery.toLowerCase());
 
                     if (!matchesSearch) return false;
-
-                    // Status filter (you may need to add balance calculation logic)
-                    if (_selectedFilter == "Active") {
-                      // Assuming groups with expenses are active
-                      return (group["expenses"] as List?)?.isNotEmpty ?? false;
-                    } else if (_selectedFilter == "Settled") {
-                      return (group["expenses"] as List?)?.isEmpty ?? true;
-                    }
 
                     return true;
                   }).toList();
@@ -262,7 +240,9 @@ class _GroupTabState extends State<GroupTab> {
                                         gradient: LinearGradient(
                                           colors: [
                                             purposeColor,
-                                            purposeColor.withOpacity(0.7),
+                                            purposeColor.withAlpha(
+                                              (255 * 0.7).round(),
+                                            ),
                                           ],
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
@@ -270,8 +250,8 @@ class _GroupTabState extends State<GroupTab> {
                                         borderRadius: BorderRadius.circular(12),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: purposeColor.withOpacity(
-                                              0.3,
+                                            color: purposeColor.withAlpha(
+                                              (255 * 0.6).round(),
                                             ),
                                             blurRadius: 8,
                                             offset: const Offset(0, 4),
@@ -359,8 +339,8 @@ class _GroupTabState extends State<GroupTab> {
                                               vertical: 4,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: purposeColor.withOpacity(
-                                                0.1,
+                                              color: purposeColor.withAlpha(
+                                                (255 * 0.1).round(),
                                               ),
                                               borderRadius:
                                                   BorderRadius.circular(12),
@@ -472,44 +452,6 @@ class _GroupTabState extends State<GroupTab> {
         label: const Text(
           "New Group",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-      ),
-    );
-  }
-
-  Widget _filterChip(String label, IconData icon) {
-    final isSelected = _selectedFilter == label;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedFilter = label),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? primary : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: primary.withOpacity(0.3),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : [],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: isSelected ? Colors.white : primary),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : primary,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-          ],
         ),
       ),
     );

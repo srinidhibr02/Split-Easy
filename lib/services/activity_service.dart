@@ -168,35 +168,87 @@ class ActivityService {
     );
   }
 
-  // Create activity when settlement is recorded
-  Future<void> settlementRecordedActivity({
+  Future<void> recordSettlement({
     required String groupId,
-    required String groupName,
     required String fromPhone,
-    required String fromName,
     required String toPhone,
-    required String toName,
     required double amount,
-    required String recordedByPhone,
-    required String recordedByName,
+    required String fromName,
+    required String toName,
   }) async {
-    await _createActivity(
-      groupId: groupId,
-      type: ActivityType.settlementRecorded,
-      actorPhone: recordedByPhone,
-      actorName: recordedByName,
-      title: "Payment recorded",
-      description:
-          "$fromName paid ₹${amount.toStringAsFixed(2)} to $toName in \"$groupName\"",
-      metadata: {
-        "groupName": groupName,
-        "fromPhone": fromPhone,
-        "fromName": fromName,
-        "toPhone": toPhone,
-        "toName": toName,
-        "amount": amount,
-      },
-    );
+    try {
+      final groupRef = _firestore.collection('groups').doc(groupId);
+
+      await _firestore.runTransaction((transaction) async {
+        final groupSnapshot = await transaction.get(groupRef);
+
+        if (!groupSnapshot.exists) {
+          throw Exception('Group not found');
+        }
+
+        final groupData = groupSnapshot.data() as Map<String, dynamic>;
+        final members = List<Map<String, dynamic>>.from(
+          groupData['members'] as List<dynamic>,
+        );
+
+        bool fromFound = false;
+        bool toFound = false;
+
+        for (var i = 0; i < members.length; i++) {
+          final member = members[i];
+          final phoneNumber = member['phoneNumber'] as String;
+
+          if (phoneNumber == fromPhone) {
+            final currentBalance = (member['balance'] ?? 0.0) as num;
+            members[i]['balance'] = currentBalance.toDouble() + amount;
+            fromFound = true;
+          } else if (phoneNumber == toPhone) {
+            final currentBalance = (member['balance'] ?? 0.0) as num;
+            members[i]['balance'] = currentBalance.toDouble() - amount;
+            toFound = true;
+          }
+
+          if (fromFound && toFound) break;
+        }
+
+        if (!fromFound || !toFound) {
+          throw Exception('One or both members not found');
+        }
+
+        transaction.update(groupRef, {'members': members});
+
+        // Record settlement document
+        final settlementRef = groupRef.collection('settlements').doc();
+        transaction.set(settlementRef, {
+          'fromPhone': fromPhone,
+          'fromName': fromName,
+          'toPhone': toPhone,
+          'toName': toName,
+          'amount': amount,
+          'timestamp': FieldValue.serverTimestamp(),
+          'recordedAt': DateTime.now().toIso8601String(),
+        });
+      });
+
+      // ✅ Record activity after successful transaction
+      await _createActivity(
+        groupId: groupId,
+        type: ActivityType.settlementRecorded,
+        actorPhone: fromPhone,
+        actorName: fromName,
+        title: "Settlement Recorded",
+        description: "$fromName paid $toName ₹${amount.toStringAsFixed(2)}",
+        metadata: {
+          "fromPhone": fromPhone,
+          "fromName": fromName,
+          "toPhone": toPhone,
+          "toName": toName,
+          "amount": amount,
+        },
+      );
+    } catch (e) {
+      throw Exception('Failed to record settlement: $e');
+    }
   }
 
   // Generic method to create activity

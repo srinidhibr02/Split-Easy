@@ -779,11 +779,16 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                   : const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.add_circle_outline, size: 20),
+                        Icon(
+                          Icons.add_circle_outline,
+                          size: 20,
+                          color: Colors.white,
+                        ),
                         SizedBox(width: 8),
                         Text(
                           "Add Expense",
                           style: TextStyle(
+                            color: Colors.white,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),

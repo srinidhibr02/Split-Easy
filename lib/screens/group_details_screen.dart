@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:split_easy/screens/settlement.dart';
 import 'package:split_easy/services/auth_services.dart';
 import 'package:split_easy/services/firestore_services.dart';
@@ -36,7 +35,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [primary, primary.withOpacity(0.7)],
+                  colors: [primary, primary.withAlpha((255 * 0.7).round())],
                 ),
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -62,7 +61,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                   Text(
                     widget.group["purpose"] ?? "",
                     style: TextStyle(
-                      color: primary.withOpacity(0.7),
+                      color: primary.withAlpha((255 * 0.7).round()),
                       fontSize: 12,
                     ),
                   ),
@@ -101,15 +100,15 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      primary.withOpacity(0.1),
-                      secondary.withOpacity(0.05),
+                      primary.withAlpha((255 * 0.7).round()),
+                      secondary.withAlpha((255 * 0.05).round()),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: primary.withOpacity(0.2),
+                    color: primary.withAlpha((255 * 0.2).round()),
                     width: 1.5,
                   ),
                 ),
@@ -713,10 +712,10 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color..withAlpha((255 * 0.1).round()),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(icon, color: color, size: 24),
+          child: Icon(icon, color: Colors.white, size: 24),
         ),
         const SizedBox(height: 8),
         Text(
@@ -748,9 +747,9 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withAlpha((255 * 0.1).round()),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withAlpha((255 * 0.3).round())),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -870,37 +869,6 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
     );
   }
 
-  Widget _roundButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(40),
-          child: CircleAvatar(
-            radius: 28, // size of circle
-            // ignore: deprecated_member_use
-            backgroundColor: primary.withOpacity(0.1),
-            child: Icon(icon, color: primary, size: 28),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          label,
-          style: const TextStyle(
-            color: primary,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
   void _showEditExpenseDialog(
     BuildContext context,
     String expenseId,
@@ -940,6 +908,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
       if (selectedPayers.isNotEmpty) {
         double oldTotal = selectedPayers.values.fold(
           0,
+          // ignore: avoid_types_as_parameter_names
           (sum, val) => sum + val,
         );
         if (oldTotal > 0) {
@@ -958,6 +927,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
       if (selectedParticipants.isNotEmpty) {
         double oldTotal = selectedParticipants.values.fold(
           0,
+          // ignore: avoid_types_as_parameter_names
           (sum, val) => sum + val,
         );
         if (oldTotal > 0) {
@@ -1245,14 +1215,6 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                   }
 
                   try {
-                    print('=== Edit Expense Debug ===');
-                    print('Expense Title: $expenseTitle');
-                    print('Expense Amount: $expenseAmount');
-                    print('Old PaidBy: $oldPaidBy');
-                    print('Old Participants: $oldParticipants');
-                    print('New PaidBy: $selectedPayers');
-                    print('New Participants: $selectedParticipants');
-
                     // Call Firestore service to edit expense
                     await groupService.editExpenseWithActivity(
                       groupId: group["id"],
@@ -1275,7 +1237,6 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                       );
                     }
                   } catch (e) {
-                    print('Error in dialog: $e');
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(

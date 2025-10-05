@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:split_easy/constants.dart';
 
 class MemberSelectionDialog extends StatefulWidget {
   final List<Map<String, dynamic>> members;
@@ -94,7 +95,7 @@ class _MemberSelectionDialogState extends State<MemberSelectionDialog> {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: Colors.blue,
+                      color: primary,
                     ),
                   ),
                 ],
@@ -236,6 +237,7 @@ class _MemberSelectionDialogState extends State<MemberSelectionDialog> {
             SwitchListTile(
               title: Text(equalSplit ? "Equal Split" : "Custom Split"),
               subtitle: const Text("Distribution method"),
+              activeThumbColor: primary,
               value: equalSplit,
               onChanged: (v) {
                 setState(() {
@@ -256,6 +258,7 @@ class _MemberSelectionDialogState extends State<MemberSelectionDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   CheckboxListTile(
+                    activeColor: primary,
                     title: Row(
                       children: [
                         Expanded(
@@ -326,9 +329,13 @@ class _MemberSelectionDialogState extends State<MemberSelectionDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text("Cancel"),
+          child: const Text("Cancel", style: TextStyle(color: primary)),
         ),
         ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primary,
+            foregroundColor: Colors.white,
+          ),
           onPressed: () {
             // Validate before returning
             if (selectedMembers.isEmpty) {
@@ -363,7 +370,7 @@ class _MemberSelectionDialogState extends State<MemberSelectionDialog> {
 
             Navigator.pop(context, selectedMembers);
           },
-          child: const Text("Save"),
+          child: const Text("Save", style: TextStyle(color: Colors.white)),
         ),
       ],
     );

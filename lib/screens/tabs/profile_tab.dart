@@ -337,18 +337,6 @@ class _ProfileTabState extends State<ProfileTab>
                                 showDivider: true,
                               ),
 
-                              // Privacy & Security
-                              _buildSettingsTile(
-                                icon: Icons.lock_outline,
-                                iconColor: Colors.green,
-                                title: "Privacy & Security",
-                                subtitle: "Control your privacy settings",
-                                onTap: () {
-                                  // TODO: Navigate to privacy settings
-                                },
-                                showDivider: true,
-                              ),
-
                               // Payment Methods
                               _buildSettingsTile(
                                 icon: Icons.payment_outlined,
