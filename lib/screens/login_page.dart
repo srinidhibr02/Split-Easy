@@ -198,7 +198,7 @@ class _LoginPageState extends State<LoginPage>
                 width: 372,
                 decoration: BoxDecoration(
                   border: Border.all(
-                    color: secondary.withOpacity(0.3),
+                    color: secondary.withAlpha((255 * 0.3).round()),
                     width: 4,
                   ),
                 ),
@@ -315,7 +315,7 @@ class _LoginPageState extends State<LoginPage>
           decoration: BoxDecoration(
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withAlpha((255 * 0.05).round()),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -383,9 +383,9 @@ class _LoginPageState extends State<LoginPage>
             onPressed: isLoading ? null : sendOTP,
             style: ElevatedButton.styleFrom(
               backgroundColor: primary,
-              disabledBackgroundColor: primary.withOpacity(0.6),
+              disabledBackgroundColor: primary.withAlpha((255 * 0.6).round()),
               elevation: 4,
-              shadowColor: primary.withOpacity(0.4),
+              shadowColor: primary.withAlpha((255 * 0.4).round()),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

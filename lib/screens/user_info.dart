@@ -15,7 +15,6 @@ class UserInfo extends StatefulWidget {
 class _UserInfoState extends State<UserInfo>
     with SingleTickerProviderStateMixin {
   final TextEditingController _nameController = TextEditingController();
-  AuthServices _authServices = AuthServices();
 
   String? _selectedAvatar;
   bool _isLoading = true;
@@ -214,7 +213,9 @@ class _UserInfoState extends State<UserInfo>
                                       Container(
                                         padding: const EdgeInsets.all(20),
                                         decoration: BoxDecoration(
-                                          color: primary.withOpacity(0.1),
+                                          color: primary.withAlpha(
+                                            (255 * 0.1).round(),
+                                          ),
                                           shape: BoxShape.circle,
                                         ),
                                         child: Icon(
@@ -254,7 +255,9 @@ class _UserInfoState extends State<UserInfo>
                                   borderRadius: BorderRadius.circular(16),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.04),
+                                      color: Colors.black.withAlpha(
+                                        (255 * 0.04).round(),
+                                      ),
                                       blurRadius: 10,
                                       offset: const Offset(0, 2),
                                     ),
@@ -269,7 +272,9 @@ class _UserInfoState extends State<UserInfo>
                                         Container(
                                           padding: const EdgeInsets.all(8),
                                           decoration: BoxDecoration(
-                                            color: primary.withOpacity(0.1),
+                                            color: primary.withAlpha(
+                                              (255 * 0.1).round(),
+                                            ),
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
@@ -344,7 +349,9 @@ class _UserInfoState extends State<UserInfo>
                                   borderRadius: BorderRadius.circular(16),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.04),
+                                      color: Colors.black.withAlpha(
+                                        (255 * 0.04).round(),
+                                      ),
                                       blurRadius: 10,
                                       offset: const Offset(0, 2),
                                     ),
@@ -359,7 +366,9 @@ class _UserInfoState extends State<UserInfo>
                                         Container(
                                           padding: const EdgeInsets.all(8),
                                           decoration: BoxDecoration(
-                                            color: secondary.withOpacity(0.2),
+                                            color: secondary.withAlpha(
+                                              (255 * 0.2).round(),
+                                            ),
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
@@ -455,7 +464,10 @@ class _UserInfoState extends State<UserInfo>
                                                   ? [
                                                       BoxShadow(
                                                         color: primary
-                                                            .withOpacity(0.3),
+                                                            .withAlpha(
+                                                              (255 * 0.3)
+                                                                  .round(),
+                                                            ),
                                                         blurRadius: 8,
                                                         spreadRadius: 2,
                                                       ),
