@@ -1,112 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:split_easy/services/activity_service.dart';
+import 'package:split_easy/services/auth_services.dart';
 import 'package:split_easy/services/friend_balance_service.dart';
 import 'package:split_easy/services/group_services.dart';
+import 'package:split_easy/services/settlement_service.dart';
 
-/// Service that wraps expense operations and automatically updates friend balances
-/// Use this instead of direct Firestore calls to ensure balances stay in sync
 class ExpenseService {
+  final AuthServices _auth = AuthServices();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GroupService groupService = GroupService();
   final FriendsBalanceService _friendsBalanceService = FriendsBalanceService();
 
-  /// Add expense and update all group members' friend balances
-  Future<void> addExpense({
-    required String groupId,
-    required Map<String, dynamic> expenseData,
-  }) async {
-    try {
-      // Add the expense
-      await _firestore
-          .collection('groups')
-          .doc(groupId)
-          .collection('expenses')
-          .add(expenseData);
-
-      // Update balances for ALL group members (even offline ones)
-      await _updateAllMemberBalances(groupId);
-
-      print('✅ Expense added and balances updated for all members');
-    } catch (e) {
-      print('❌ Error adding expense: $e');
-      rethrow;
-    }
-  }
-
-  /// Update expense and recalculate balances
-  Future<void> updateExpense({
-    required String groupId,
-    required String expenseId,
-    required Map<String, dynamic> expenseData,
-  }) async {
-    try {
-      await _firestore
-          .collection('groups')
-          .doc(groupId)
-          .collection('expenses')
-          .doc(expenseId)
-          .update(expenseData);
-
-      await _updateAllMemberBalances(groupId);
-
-      print('✅ Expense updated and balances recalculated');
-    } catch (e) {
-      print('❌ Error updating expense: $e');
-      rethrow;
-    }
-  }
-
-  /// Delete expense and recalculate balances
-  Future<void> deleteExpense({
-    required String groupId,
-    required String expenseId,
-  }) async {
-    try {
-      await _firestore
-          .collection('groups')
-          .doc(groupId)
-          .collection('expenses')
-          .doc(expenseId)
-          .delete();
-
-      await _updateAllMemberBalances(groupId);
-
-      print('✅ Expense deleted and balances recalculated');
-    } catch (e) {
-      print('❌ Error deleting expense: $e');
-      rethrow;
-    }
-  }
-
-  /// Add settlement and update balances
-  Future<void> addSettlement({
-    required String groupId,
-    required String fromPhone,
-    required String toPhone,
-    required double amount,
-  }) async {
-    try {
-      await _firestore
-          .collection('groups')
-          .doc(groupId)
-          .collection('settlements')
-          .add({
-            'fromPhone': fromPhone,
-            'toPhone': toPhone,
-            'amount': amount,
-            'timestamp': FieldValue.serverTimestamp(),
-          });
-
-      await _updateAllMemberBalances(groupId);
-
-      print('✅ Settlement recorded and balances updated');
-    } catch (e) {
-      print('❌ Error adding settlement: $e');
-      rethrow;
-    }
-  }
-
-  /// Update balances for ALL members in a group
-  /// This ensures even offline users get updated balances in Firestore
   Future<void> _updateAllMemberBalances(String groupId) async {
     try {
       // Get group data
@@ -127,12 +31,6 @@ class ExpenseService {
         // Get all groups this member is part of
         final memberGroups = await groupService.getMemberGroups(memberPhone);
 
-        // Recalculate balances with all their friends across all groups
-        await _friendsBalanceService.recalculateUserFriendBalances(
-          userPhone: memberPhone,
-          groups: memberGroups,
-        );
-
         print('✅ Updated balances for $memberPhone');
       }
     } catch (e) {
@@ -140,7 +38,275 @@ class ExpenseService {
     }
   }
 
-  /// Get all groups a member belongs to
+  Future<void> addExpenseWithActivity({
+    required String groupId,
+    required String title,
+    required double amount,
+    required Map<String, double> paidBy,
+    required Map<String, double> participants,
+  }) async {
+    final currentUserPhone = _auth.currentUser?.phoneNumber ?? "";
+
+    final names = await groupService.getUserAndGroupNames(
+      currentUserPhone,
+      groupId,
+    );
+    try {
+      String? expenseId;
+
+      await _firestore.runTransaction((transaction) async {
+        final groupRef = _firestore.collection('groups').doc(groupId);
+        final groupSnapshot = await transaction.get(groupRef);
+
+        final expenseRef = groupRef.collection('expenses').doc();
+        expenseId = expenseRef.id;
+
+        final expenseData = {
+          "title": title,
+          "amount": amount,
+          "paidBy": paidBy,
+          "participants": participants,
+          "createdAt": FieldValue.serverTimestamp(),
+        };
+
+        Map<String, double> balanceChanges = {};
+        paidBy.forEach((phoneNumber, amountPaid) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) + amountPaid;
+        });
+        participants.forEach((phoneNumber, amountOwed) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) - amountOwed;
+        });
+        List<dynamic> members = groupSnapshot.get('members') ?? [];
+        List<Map<String, dynamic>> updatedMembers = members.map((member) {
+          Map<String, dynamic> memberMap = Map<String, dynamic>.from(member);
+          String phoneNumber = memberMap['phoneNumber'];
+
+          if (balanceChanges.containsKey(phoneNumber)) {
+            double currentBalance = (memberMap['balance'] ?? 0.0).toDouble();
+            memberMap['balance'] =
+                currentBalance + balanceChanges[phoneNumber]!;
+          }
+
+          return memberMap;
+        }).toList();
+
+        transaction.set(expenseRef, expenseData);
+        transaction.update(groupRef, {'members': updatedMembers});
+      });
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      await SettlementService().updateSuggestedSettlements(groupId);
+
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      await ActivityService().expenseAddedActivity(
+        groupId: groupId,
+        groupName: names['groupName']!,
+        expenseId: expenseId ?? 'unknown',
+        expenseTitle: title,
+        amount: amount,
+        addedByPhone: currentUserPhone,
+        addedByName: names['userName']!,
+        paidBy: paidBy,
+        participants: participants,
+      );
+      print('Expense created successfully');
+    } catch (e) {
+      print('Error adding expense: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> editExpenseWithActivity({
+    required String groupId,
+    required String expenseId,
+    required String title,
+    required double amount,
+    required Map<String, double> paidBy,
+    required Map<String, double> participants,
+    required Map<String, double> oldPaidBy,
+    required Map<String, double> oldParticipants,
+  }) async {
+    final currentUserPhone = _auth.currentUser?.phoneNumber ?? "";
+
+    // Single batched read
+    final names = await groupService.getUserAndGroupNames(
+      currentUserPhone,
+      groupId,
+    );
+
+    try {
+      await _firestore.runTransaction((transaction) async {
+        DocumentReference groupRef = _firestore
+            .collection('groups')
+            .doc(groupId);
+        DocumentSnapshot groupSnapshot = await transaction.get(groupRef);
+
+        if (!groupSnapshot.exists) {
+          throw Exception('Group not found');
+        }
+
+        List<dynamic> members = groupSnapshot.get('members') ?? [];
+        Map<String, double> balanceChanges = {};
+
+        // Reverse old balance changes
+        oldPaidBy.forEach((phoneNumber, amountPaid) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) - amountPaid;
+        });
+
+        oldParticipants.forEach((phoneNumber, amountOwed) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) + amountOwed;
+        });
+
+        // Apply new balance changes
+        paidBy.forEach((phoneNumber, amountPaid) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) + amountPaid;
+        });
+
+        participants.forEach((phoneNumber, amountOwed) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) - amountOwed;
+        });
+
+        List<Map<String, dynamic>> updatedMembers = members.map((member) {
+          Map<String, dynamic> memberMap = Map<String, dynamic>.from(member);
+          String phoneNumber = memberMap['phoneNumber'];
+
+          if (balanceChanges.containsKey(phoneNumber)) {
+            double currentBalance = (memberMap['balance'] ?? 0.0).toDouble();
+            memberMap['balance'] =
+                currentBalance + balanceChanges[phoneNumber]!;
+          }
+
+          return memberMap;
+        }).toList();
+
+        DocumentReference expenseRef = groupRef
+            .collection('expenses')
+            .doc(expenseId);
+
+        var expenseData = {
+          "title": title,
+          "amount": amount,
+          "paidBy": paidBy,
+          "participants": participants,
+          "updatedAt": FieldValue.serverTimestamp(),
+        };
+
+        transaction.update(expenseRef, expenseData);
+        transaction.update(groupRef, {'members': updatedMembers});
+      });
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Background tasks
+      await SettlementService().updateSuggestedSettlements(groupId);
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      await ActivityService().expenseEditedActivity(
+        groupId: groupId,
+        groupName: names['groupName']!,
+        expenseId: expenseId,
+        expenseTitle: title,
+        amount: amount,
+        editedByPhone: currentUserPhone,
+        editedByName: names['userName']!,
+      );
+
+      print('Expense edited successfully');
+    } catch (e) {
+      print('Error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteExpenseWithActivity({
+    required String groupId,
+    required String expenseId,
+    required String expenseTitle,
+    required double amount,
+    required Map<String, double> paidBy,
+    required Map<String, double> participants,
+  }) async {
+    final currentUserPhone = _auth.currentUser?.phoneNumber ?? "";
+
+    // Single batched read
+    final names = await groupService.getUserAndGroupNames(
+      currentUserPhone,
+      groupId,
+    );
+
+    try {
+      await _firestore.runTransaction((transaction) async {
+        DocumentReference groupRef = _firestore
+            .collection('groups')
+            .doc(groupId);
+        DocumentSnapshot groupSnapshot = await transaction.get(groupRef);
+
+        if (!groupSnapshot.exists) {
+          throw Exception('Group not found');
+        }
+
+        List<dynamic> members = groupSnapshot.get('members') ?? [];
+        Map<String, double> balanceChanges = {};
+
+        // Reverse balance changes
+        paidBy.forEach((phoneNumber, amountPaid) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) - amountPaid;
+        });
+
+        participants.forEach((phoneNumber, amountOwed) {
+          balanceChanges[phoneNumber] =
+              (balanceChanges[phoneNumber] ?? 0) + amountOwed;
+        });
+
+        List<Map<String, dynamic>> updatedMembers = members.map((member) {
+          Map<String, dynamic> memberMap = Map<String, dynamic>.from(member);
+          String phoneNumber = memberMap['phoneNumber'];
+
+          if (balanceChanges.containsKey(phoneNumber)) {
+            double currentBalance = (memberMap['balance'] ?? 0.0).toDouble();
+            memberMap['balance'] =
+                currentBalance + balanceChanges[phoneNumber]!;
+          }
+
+          return memberMap;
+        }).toList();
+
+        DocumentReference expenseRef = groupRef
+            .collection('expenses')
+            .doc(expenseId);
+        transaction.delete(expenseRef);
+        transaction.update(groupRef, {'members': updatedMembers});
+      });
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Background tasks
+      await SettlementService().updateSuggestedSettlements(groupId);
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      await _updateAllMemberBalances(groupId);
+
+      await ActivityService().expenseDeletedActivity(
+        groupId: groupId,
+        groupName: names['groupName']!,
+        expenseTitle: expenseTitle,
+        amount: amount,
+        deletedByPhone: currentUserPhone,
+        deletedByName: names['userName']!,
+      );
+
+      print('Expense deleted successfully');
+    } catch (e) {
+      print('Error: $e');
+      rethrow;
+    }
+  }
 }
 
 // Singleton instance

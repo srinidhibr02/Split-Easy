@@ -59,7 +59,7 @@ class _ProfileTabState extends State<ProfileTab>
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: const Text('Log Out'),
+            child: const Text('Log Out', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

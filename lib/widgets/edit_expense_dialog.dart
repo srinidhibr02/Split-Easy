@@ -1,61 +1,81 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:split_easy/constants.dart';
-import 'package:split_easy/widgets/member_selection_dialog.dart';
+import 'member_selection_dialog.dart';
 
-void showAddExpenseDialog(
+void showEditExpenseDialog(
   BuildContext context, {
-  required Map<String, dynamic> group,
+  required String groupId,
+  required String expenseId,
+  required Map<String, dynamic> expense,
   required Function({
     required String groupId,
+    required String expenseId,
     required String title,
     required double amount,
     required Map<String, double> paidBy,
     required Map<String, double> participants,
+    required Map<String, double> oldPaidBy,
+    required Map<String, double> oldParticipants,
   })
-  onAddExpense,
+  onEditExpense,
   required Stream<Map<String, dynamic>> Function(String) streamGroupById,
 }) {
   showDialog(
     context: context,
     barrierDismissible: false,
-    builder: (_) => AddExpenseDialog(
-      group: group,
-      onAddExpense: onAddExpense,
+    builder: (_) => EditExpenseDialog(
+      groupId: groupId,
+      expenseId: expenseId,
+      expense: expense,
+      onEditExpense: onEditExpense,
       streamGroupById: streamGroupById,
     ),
   );
 }
 
-class AddExpenseDialog extends StatefulWidget {
-  final Map<String, dynamic> group;
+class EditExpenseDialog extends StatefulWidget {
+  final String groupId;
+  final String expenseId;
+  final Map<String, dynamic> expense;
   final Function({
     required String groupId,
+    required String expenseId,
     required String title,
     required double amount,
     required Map<String, double> paidBy,
     required Map<String, double> participants,
+    required Map<String, double> oldPaidBy,
+    required Map<String, double> oldParticipants,
   })
-  onAddExpense;
+  onEditExpense;
   final Stream<Map<String, dynamic>> Function(String) streamGroupById;
 
-  const AddExpenseDialog({
+  const EditExpenseDialog({
     super.key,
-    required this.group,
-    required this.onAddExpense,
+    required this.groupId,
+    required this.expenseId,
+    required this.expense,
+    required this.onEditExpense,
     required this.streamGroupById,
   });
 
   @override
-  State<AddExpenseDialog> createState() => _AddExpenseDialogState();
+  State<EditExpenseDialog> createState() => _EditExpenseDialogState();
 }
 
-class _AddExpenseDialogState extends State<AddExpenseDialog>
+class _EditExpenseDialogState extends State<EditExpenseDialog>
     with SingleTickerProviderStateMixin {
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _amountController = TextEditingController();
-  Map<String, double> _selectedPayers = {};
-  Map<String, double> _selectedParticipants = {};
+  late TextEditingController titleController;
+  late TextEditingController amountController;
+
+  late Map<String, double> selectedPayers;
+  late Map<String, double> selectedParticipants;
+
+  late Map<String, double> oldPaidBy;
+  late Map<String, double> oldParticipants;
+
+  double lastAmount = 0;
   bool _isLoading = false;
   String? _titleError;
   String? _amountError;
@@ -65,6 +85,21 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
   @override
   void initState() {
     super.initState();
+    titleController = TextEditingController(
+      text: widget.expense["title"] ?? "",
+    );
+    amountController = TextEditingController(
+      text: widget.expense["amount"]?.toString() ?? "",
+    );
+
+    oldPaidBy = Map<String, double>.from(widget.expense["paidBy"] ?? {});
+    oldParticipants = Map<String, double>.from(
+      widget.expense["participants"] ?? {},
+    );
+    selectedPayers = Map<String, double>.from(oldPaidBy);
+    selectedParticipants = Map<String, double>.from(oldParticipants);
+    lastAmount = widget.expense["amount"]?.toDouble() ?? 0;
+
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -75,60 +110,114 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
     );
     _animationController.forward();
 
-    _titleController.addListener(_onTitleChanged);
-    _amountController.addListener(_onAmountChanged);
+    titleController.addListener(_onTitleChanged);
+    amountController.addListener(_onAmountChanged);
   }
 
   void _onTitleChanged() {
-    if (_titleError != null && _titleController.text.trim().isNotEmpty) {
+    if (_titleError != null && titleController.text.trim().isNotEmpty) {
       setState(() => _titleError = null);
     }
   }
 
   void _onAmountChanged() {
     if (_amountError != null) {
-      final amount = double.tryParse(_amountController.text.trim());
+      final amount = double.tryParse(amountController.text.trim());
       if (amount != null && amount > 0) {
         setState(() => _amountError = null);
       }
     }
   }
 
+  @override
+  void dispose() {
+    titleController.dispose();
+    amountController.dispose();
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void recalculateShares(double newAmount) {
+    if (newAmount <= 0 || (newAmount - lastAmount).abs() < 0.01) return;
+
+    if (selectedPayers.isNotEmpty) {
+      double oldTotal = selectedPayers.values.fold(0, (a, b) => a + b);
+      if (oldTotal > 0) {
+        setState(() {
+          selectedPayers = selectedPayers.map((phone, val) {
+            double proportion = val / oldTotal;
+            double newVal = (newAmount * proportion * 100).round() / 100;
+            return MapEntry(phone, newVal);
+          });
+        });
+      }
+    }
+
+    if (selectedParticipants.isNotEmpty) {
+      double oldTotal = selectedParticipants.values.fold(0, (a, b) => a + b);
+      if (oldTotal > 0) {
+        setState(() {
+          selectedParticipants = selectedParticipants.map((phone, val) {
+            double proportion = val / oldTotal;
+            double newVal = (newAmount * proportion * 100).round() / 100;
+            return MapEntry(phone, newVal);
+          });
+        });
+      }
+    }
+
+    lastAmount = newAmount;
+  }
+
   bool _validateForm() {
     bool isValid = true;
 
-    if (_titleController.text.trim().isEmpty) {
+    if (titleController.text.trim().isEmpty) {
       setState(() => _titleError = "Title is required");
       isValid = false;
     }
 
-    final amount = double.tryParse(_amountController.text.trim());
+    final amount = double.tryParse(amountController.text.trim());
     if (amount == null || amount <= 0) {
       setState(() => _amountError = "Enter valid amount");
       isValid = false;
     }
 
-    if (_selectedPayers.isEmpty) {
+    if (selectedPayers.isEmpty) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(_buildErrorSnackBar("Please select at least one payer"));
       isValid = false;
     }
 
-    if (_selectedParticipants.isEmpty) {
+    if (selectedParticipants.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         _buildErrorSnackBar("Please select at least one participant"),
       );
       isValid = false;
     }
 
-    // Validate payers sum matches amount
-    if (amount != null && _selectedPayers.isNotEmpty) {
-      final payersSum = _selectedPayers.values.reduce((a, b) => a + b);
+    // Validate totals match amount
+    if (amount != null && selectedPayers.isNotEmpty) {
+      final payersSum = selectedPayers.values.reduce((a, b) => a + b);
       if ((payersSum - amount).abs() > 0.01) {
         ScaffoldMessenger.of(context).showSnackBar(
           _buildErrorSnackBar(
             "Payers total (₹${payersSum.toStringAsFixed(2)}) must equal expense amount",
+          ),
+        );
+        isValid = false;
+      }
+    }
+
+    if (amount != null && selectedParticipants.isNotEmpty) {
+      final participantsSum = selectedParticipants.values.reduce(
+        (a, b) => a + b,
+      );
+      if ((participantsSum - amount).abs() > 0.01) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          _buildErrorSnackBar(
+            "Participants total (₹${participantsSum.toStringAsFixed(2)}) must equal expense amount",
           ),
         );
         isValid = false;
@@ -153,56 +242,6 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
     );
   }
 
-  Future<void> _handleSubmit() async {
-    if (!_validateForm()) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      await widget.onAddExpense(
-        groupId: widget.group["id"],
-        title: _titleController.text.trim(),
-        amount: double.parse(_amountController.text.trim()),
-        paidBy: _selectedPayers,
-        participants: _selectedParticipants,
-      );
-
-      if (!mounted) return;
-
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 12),
-              const Text("Expense added successfully!"),
-            ],
-          ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(_buildErrorSnackBar("Failed to add expense"));
-    }
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _amountController.dispose();
-    _animationController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return ScaleTransition(
@@ -220,7 +259,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
               _buildHeader(),
               Flexible(
                 child: StreamBuilder<Map<String, dynamic>>(
-                  stream: widget.streamGroupById(widget.group["id"]),
+                  stream: widget.streamGroupById(widget.groupId),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) {
                       return Center(
@@ -231,9 +270,9 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                       );
                     }
 
-                    final updatedGroup = snapshot.data ?? {};
+                    final groupData = snapshot.data ?? {};
                     final members =
-                        (updatedGroup["members"] as List<dynamic>? ?? [])
+                        (groupData["members"] as List<dynamic>? ?? [])
                             .map((e) => e as Map<String, dynamic>)
                             .toList();
 
@@ -255,7 +294,6 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                   },
                 ),
               ),
-
               _buildActions(),
             ],
           ),
@@ -286,11 +324,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
               color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.receipt_long,
-              color: Colors.white,
-              size: 28,
-            ),
+            child: const Icon(Icons.edit_note, color: Colors.white, size: 28),
           ),
           const SizedBox(width: 16),
           const Expanded(
@@ -298,7 +332,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Add Expense",
+                  "Edit Expense",
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -307,14 +341,14 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                 ),
                 SizedBox(height: 4),
                 Text(
-                  "Split expenses with your group",
+                  "Update expense details",
                   style: TextStyle(fontSize: 13, color: Colors.white70),
                 ),
               ],
             ),
           ),
           IconButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: _isLoading ? null : () => Navigator.pop(context),
             icon: const Icon(Icons.close, color: Colors.white),
             tooltip: 'Close',
           ),
@@ -339,7 +373,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
         ),
         const SizedBox(height: 12),
         TextField(
-          controller: _titleController,
+          controller: titleController,
           enabled: !_isLoading,
           decoration: InputDecoration(
             hintText: "e.g., Dinner at restaurant",
@@ -390,7 +424,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
         ),
         const SizedBox(height: 12),
         TextField(
-          controller: _amountController,
+          controller: amountController,
           enabled: !_isLoading,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [
@@ -425,6 +459,12 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
               color: Colors.grey[700],
             ),
           ),
+          onChanged: (v) {
+            double amt = double.tryParse(v) ?? 0;
+            if ((amt - lastAmount).abs() > 0.01) {
+              recalculateShares(amt);
+            }
+          },
         ),
         if (_amountError != null) _buildErrorText(_amountError!),
       ],
@@ -450,86 +490,94 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
           ],
         ),
         const SizedBox(height: 12),
-        InkWell(
-          onTap: _isLoading
-              ? null
-              : () async {
-                  // Get the current amount when dialog opens
-                  final currentAmount =
-                      double.tryParse(_amountController.text.trim()) ?? 0;
+        Semantics(
+          button: true,
+          label:
+              'Who Paid, ${selectedPayers.isEmpty ? "none selected" : "${selectedPayers.length} members selected"}',
+          child: InkWell(
+            onTap: _isLoading
+                ? null
+                : () async {
+                    final currentAmount =
+                        double.tryParse(amountController.text.trim()) ?? 0;
 
-                  if (currentAmount <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      _buildErrorSnackBar("Please enter an amount first"),
+                    if (currentAmount <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        _buildErrorSnackBar("Please enter an amount first"),
+                      );
+                      return;
+                    }
+
+                    final result = await showDialog(
+                      context: context,
+                      builder: (_) => MemberSelectionDialog(
+                        members: members,
+                        amount: currentAmount,
+                        initialSelected: selectedPayers,
+                      ),
                     );
-                    return;
-                  }
-
-                  final result = await showDialog(
-                    context: context,
-                    builder: (_) => MemberSelectionDialog(
-                      members: members,
-                      amount: currentAmount,
-                      initialSelected: _selectedPayers,
+                    if (result != null) {
+                      setState(
+                        () => selectedPayers = Map<String, double>.from(result),
+                      );
+                    }
+                  },
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green[200]!, width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green[100],
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  );
-                  if (result != null) {
-                    setState(
-                      () => _selectedPayers = Map<String, double>.from(result),
-                    );
-                  }
-                },
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.green[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.green[200]!, width: 1.5),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.green[100],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.person, color: Colors.green[700], size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    _selectedPayers.isEmpty
-                        ? "Tap to select who paid"
-                        : "${_selectedPayers.length} payer(s) selected",
-                    style: TextStyle(
-                      color: _selectedPayers.isEmpty
-                          ? Colors.grey[600]
-                          : Colors.black87,
-                      fontSize: 15,
+                    child: Icon(
+                      Icons.person,
+                      color: Colors.green[700],
+                      size: 20,
                     ),
                   ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: Colors.green[700],
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      selectedPayers.isEmpty
+                          ? "Tap to select who paid"
+                          : "${selectedPayers.length} payer(s) selected",
+                      style: TextStyle(
+                        color: selectedPayers.isEmpty
+                            ? Colors.grey[600]
+                            : Colors.black87,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                    color: Colors.green[700],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        if (_selectedPayers.isNotEmpty) ...[
+        if (selectedPayers.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _buildSelectedMembers(_selectedPayers, members, Colors.green),
+          _buildSelectedMembers(selectedPayers, members, Colors.green),
         ],
       ],
     );
   }
 
   Widget _buildParticipantsSection(List<Map<String, dynamic>> members) {
-    final amount = double.tryParse(_amountController.text.trim()) ?? 0;
+    final amount = double.tryParse(amountController.text.trim()) ?? 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -545,70 +593,86 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
           ],
         ),
         const SizedBox(height: 12),
-        InkWell(
-          onTap: _isLoading
-              ? null
-              : () async {
-                  final result = await showDialog(
-                    context: context,
-                    builder: (_) => MemberSelectionDialog(
-                      members: members,
-                      amount: amount,
-                      initialSelected: _selectedParticipants,
-                    ),
-                  );
-                  if (result != null) {
-                    setState(
-                      () => _selectedParticipants = Map<String, double>.from(
-                        result,
+        Semantics(
+          button: true,
+          label:
+              'Split Between, ${selectedParticipants.isEmpty ? "none selected" : "${selectedParticipants.length} members selected"}',
+          child: InkWell(
+            onTap: _isLoading
+                ? null
+                : () async {
+                    if (amount <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        _buildErrorSnackBar("Please enter an amount first"),
+                      );
+                      return;
+                    }
+
+                    final result = await showDialog(
+                      context: context,
+                      builder: (_) => MemberSelectionDialog(
+                        members: members,
+                        amount: amount,
+                        initialSelected: selectedParticipants,
                       ),
                     );
-                  }
-                },
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.orange[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.orange[200]!, width: 1.5),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[100],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.group, color: Colors.orange[700], size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    _selectedParticipants.isEmpty
-                        ? "Tap to select participants"
-                        : "${_selectedParticipants.length} participant(s) selected",
-                    style: TextStyle(
-                      color: _selectedParticipants.isEmpty
-                          ? Colors.grey[600]
-                          : Colors.black87,
-                      fontSize: 15,
+                    if (result != null) {
+                      setState(
+                        () => selectedParticipants = Map<String, double>.from(
+                          result,
+                        ),
+                      );
+                    }
+                  },
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange[200]!, width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.group,
+                      color: Colors.orange[700],
+                      size: 20,
                     ),
                   ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: Colors.orange[700],
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      selectedParticipants.isEmpty
+                          ? "Tap to select participants"
+                          : "${selectedParticipants.length} participant(s) selected",
+                      style: TextStyle(
+                        color: selectedParticipants.isEmpty
+                            ? Colors.grey[600]
+                            : Colors.black87,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                    color: Colors.orange[700],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        if (_selectedParticipants.isNotEmpty) ...[
+        if (selectedParticipants.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _buildSelectedMembers(_selectedParticipants, members, Colors.orange),
+          _buildSelectedMembers(selectedParticipants, members, Colors.orange),
         ],
       ],
     );
@@ -756,7 +820,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
           Expanded(
             flex: 2,
             child: ElevatedButton(
-              onPressed: _isLoading ? null : _handleSubmit,
+              onPressed: _isLoading ? null : _saveExpense,
               style: ElevatedButton.styleFrom(
                 backgroundColor: primary,
                 disabledBackgroundColor: primary.withOpacity(0.6),
@@ -779,13 +843,13 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.add_circle_outline,
+                          Icons.check_circle_outline,
                           size: 20,
                           color: Colors.white,
                         ),
                         SizedBox(width: 8),
                         Text(
-                          "Add Expense",
+                          "Update Expense",
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -799,5 +863,50 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
         ],
       ),
     );
+  }
+
+  Future<void> _saveExpense() async {
+    if (!_validateForm()) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      await widget.onEditExpense(
+        groupId: widget.groupId,
+        expenseId: widget.expenseId,
+        title: titleController.text.trim(),
+        amount: double.parse(amountController.text.trim()),
+        paidBy: selectedPayers,
+        participants: selectedParticipants,
+        oldPaidBy: oldPaidBy,
+        oldParticipants: oldParticipants,
+      );
+
+      if (!mounted) return;
+
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 12),
+              const Text('Expense updated successfully!'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(_buildErrorSnackBar("Failed to update expense: $e"));
+    }
   }
 }
