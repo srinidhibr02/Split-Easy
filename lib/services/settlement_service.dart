@@ -82,24 +82,14 @@ class SettlementService {
         });
       });
 
+      // Add delay to ensure Firestore propagation
+      await Future.delayed(const Duration(milliseconds: 500));
+
       // Step 2: Update friend balances for ALL group members
       await _updateAllMemberBalances(groupId);
 
       // Step 3: Recalculate and store new suggested settlements
-      final updatedGroup = await _firestore
-          .collection('groups')
-          .doc(groupId)
-          .get();
-      if (updatedGroup.exists) {
-        final groupData = updatedGroup.data() as Map<String, dynamic>;
-        final newSuggestions = SettlementCalculator.calculateSettlements(
-          groupData,
-        );
-        await storeSuggestedSettlements(
-          groupId: groupId,
-          settlements: newSuggestions,
-        );
-      }
+      await updateSuggestedSettlements(groupId);
 
       print('Settlement recorded and friend balances updated');
     } catch (e) {
@@ -107,13 +97,23 @@ class SettlementService {
     }
   }
 
-  /// Update suggested settlements in Firestore
+  /// Update suggested settlements in Firestore with fresh data
   Future<void> updateSuggestedSettlements(String groupId) async {
     try {
-      final groupDoc = await _firestore.collection('groups').doc(groupId).get();
-      if (!groupDoc.exists) return;
+      // Use get() with source: Source.server to force fresh data from server
+      final groupDoc = await _firestore
+          .collection('groups')
+          .doc(groupId)
+          .get(const GetOptions(source: Source.server));
+
+      if (!groupDoc.exists) {
+        print('Group not found: $groupId');
+        return;
+      }
 
       final groupData = groupDoc.data() as Map<String, dynamic>;
+
+      // Calculate settlements with fresh data
       final suggestions = SettlementCalculator.calculateSettlements(groupData);
 
       await storeSuggestedSettlements(
@@ -121,9 +121,12 @@ class SettlementService {
         settlements: suggestions,
       );
 
-      print('✅ Suggested settlements updated for group: $groupId');
+      print(
+        '✅ Suggested settlements updated for group: $groupId (${suggestions.length} settlements)',
+      );
     } catch (e) {
       print('❌ Error updating suggested settlements: $e');
+      rethrow;
     }
   }
 
@@ -162,13 +165,19 @@ class SettlementService {
       print('Stored ${settlements.length} suggested settlements');
     } catch (e) {
       print('Error storing suggested settlements: $e');
+      rethrow;
     }
   }
 
   /// Update friend balances for all members in the group
   Future<void> _updateAllMemberBalances(String groupId) async {
     try {
-      final groupDoc = await _firestore.collection('groups').doc(groupId).get();
+      // Force server fetch to get latest data
+      final groupDoc = await _firestore
+          .collection('groups')
+          .doc(groupId)
+          .get(const GetOptions(source: Source.server));
+
       if (!groupDoc.exists) return;
 
       final groupData = groupDoc.data()!;

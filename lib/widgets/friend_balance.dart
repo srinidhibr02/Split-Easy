@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:split_easy/constants.dart';
 
-// Widget to display friends balances
 class FriendsBalanceWidget extends StatelessWidget {
   final List<Map<String, dynamic>> friends;
 
@@ -13,94 +12,97 @@ class FriendsBalanceWidget extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min, // 👈 prevents infinite height
+        children: [
+          // Header Row (Compact)
+          Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: primary.withAlpha((255 * 0.5).round()),
-                  borderRadius: BorderRadius.circular(8),
+                  color: primary.withAlpha((255 * 0.3).round()),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Icon(Icons.people, color: Colors.white, size: 20),
+                child: const Icon(Icons.people, color: Colors.white, size: 18),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               const Text(
                 "Friends Overview",
                 style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                   color: primary,
                 ),
               ),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
+                  horizontal: 10,
+                  vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: primary.withAlpha((255 * 0.5).round()),
-                  borderRadius: BorderRadius.circular(12),
+                  color: primary.withAlpha((255 * 0.25).round()),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   "${friends.length}",
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
-                    fontSize: 12,
+                    fontSize: 11,
                   ),
                 ),
               ),
             ],
           ),
-        ),
-        SizedBox(
-          height: 120,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: friends.length > 10 ? 10 : friends.length,
-            itemBuilder: (context, index) {
-              final friend = friends[index];
-              final balance = friend['balance'] as double;
-              final name = friend['name'] as String;
-              final avatar = friend['avatar'] as String?;
+          const SizedBox(height: 8),
 
-              return Container(
-                width: 150,
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: balance > 0
-                        ? [Colors.green.shade50, Colors.green.shade100]
-                        : [Colors.red.shade50, Colors.red.shade100],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+          // Friends List
+          SizedBox(
+            height: 120,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: friends.length > 10 ? 10 : friends.length,
+              itemBuilder: (context, index) {
+                final friend = friends[index];
+                final balance = friend['balance'] as double;
+                final name = friend['name'] as String;
+                final avatar = friend['avatar'] as String?;
+
+                return Container(
+                  width: 120,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: balance > 0
+                          ? [Colors.green.shade50, Colors.green.shade100]
+                          : [Colors.red.shade50, Colors.red.shade100],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: balance > 0
+                          ? Colors.green.shade200
+                          : Colors.red.shade200,
+                      width: 1,
+                    ),
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: balance > 0
-                        ? Colors.green.shade200
-                        : Colors.red.shade200,
-                    width: 1.5,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min, // 👈 added fix
                       mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         CircleAvatar(
-                          radius: 20,
+                          radius: 15,
                           backgroundColor: Colors.white,
                           backgroundImage: avatar != null && avatar.isNotEmpty
                               ? NetworkImage(avatar)
@@ -109,7 +111,7 @@ class FriendsBalanceWidget extends StatelessWidget {
                               ? Text(
                                   name.isNotEmpty ? name[0].toUpperCase() : '?',
                                   style: TextStyle(
-                                    fontSize: 18,
+                                    fontSize: 14,
                                     fontWeight: FontWeight.bold,
                                     color: balance > 0
                                         ? Colors.green.shade700
@@ -118,18 +120,17 @@ class FriendsBalanceWidget extends StatelessWidget {
                                 )
                               : null,
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
                         Text(
                           name,
                           style: const TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           balance > 0 ? "owes you" : "you owe",
                           style: TextStyle(
@@ -137,11 +138,11 @@ class FriendsBalanceWidget extends StatelessWidget {
                             color: Colors.grey.shade600,
                           ),
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 1),
                         Text(
-                          "₹${balance.abs().toStringAsFixed(2)}",
+                          "₹${balance.abs().toStringAsFixed(0)}",
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: balance > 0
                                 ? Colors.green.shade700
@@ -151,13 +152,12 @@ class FriendsBalanceWidget extends StatelessWidget {
                       ],
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-      ],
+        ],
+      ),
     );
   }
 }
