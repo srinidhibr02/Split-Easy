@@ -4,6 +4,7 @@ import 'package:split_easy/screens/settlement.dart';
 import 'package:split_easy/services/auth_services.dart';
 import 'package:split_easy/services/firestore_services.dart';
 import 'package:split_easy/services/group_services.dart';
+import 'package:split_easy/services/stream_operations.dart';
 import 'package:split_easy/widgets/add_expense_dialog.dart';
 import 'package:split_easy/widgets/add_member_dialog.dart';
 import 'package:split_easy/widgets/member_selection_dialog.dart';
@@ -22,6 +23,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
   final FirestoreServices firestoreServices = FirestoreServices();
   final GroupService groupService = GroupService();
   final AuthServices authServices = AuthServices();
+  final StreamOperations streams = StreamOperations();
 
   @override
   Widget build(BuildContext context) {
@@ -779,7 +781,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
       builder: (context) => AlertDialog(
         title: const Text("Group Members"),
         content: StreamBuilder(
-          stream: firestoreServices.streamGroupById(group["id"]),
+          stream: streams.streamGroupById(group["id"]),
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
@@ -849,7 +851,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
     showAddExpenseDialog(
       context,
       group: group,
-      streamGroupById: firestoreServices.streamGroupById,
+      streamGroupById: streams.streamGroupById,
       onAddExpense:
           ({
             required String groupId,
