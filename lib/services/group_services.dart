@@ -35,6 +35,18 @@ class GroupService {
     });
   }
 
+  /// Stream a single group by ID
+  Stream<Map<String, dynamic>> streamGroupById(String groupId) {
+    return _firestore.collection("groups").doc(groupId).snapshots().map((
+      snapshot,
+    ) {
+      if (!snapshot.exists) return {};
+      final data = snapshot.data()!;
+      data["id"] = snapshot.id;
+      return data;
+    });
+  }
+
   Stream<int> streamExpenseCount(String groupId) {
     return _firestore
         .collection("groups")
@@ -79,12 +91,29 @@ class GroupService {
         .collection("groups")
         .doc(groupId)
         .collection("expenses")
+        .orderBy("createdAt", descending: true)
         .snapshots()
         .map(
           (snapshot) => snapshot.docs
               .map((doc) => {"id": doc.id, ...doc.data()})
               .toList(),
         );
+  }
+
+  /// Get user and group names in one batch read
+  Future<Map<String, String>> _getUserAndGroupNames(
+    String userPhone,
+    String groupId,
+  ) async {
+    final batch = await Future.wait([
+      _firestore.collection('users').doc(userPhone).get(),
+      _firestore.collection('groups').doc(groupId).get(),
+    ]);
+
+    return {
+      'userName': batch[0].data()?['name'] ?? 'Someone',
+      'groupName': batch[1].data()?['groupName'] ?? 'Group',
+    };
   }
 
   Future<void> addExpenseWithActivity({
@@ -94,30 +123,16 @@ class GroupService {
     required Map<String, double> paidBy,
     required Map<String, double> participants,
   }) async {
-    final currentUserPhone =
-        FirebaseAuth.instance.currentUser?.phoneNumber ?? "";
-    print("$currentUserPhone is adding expense");
+    final currentUserPhone = _auth.currentUser?.phoneNumber ?? "";
 
-    // Get current user name and group name (outside transaction)
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(currentUserPhone)
-        .get();
-    final userName = userDoc.data()?['name'] ?? 'Someone';
-
-    final groupDoc = await FirebaseFirestore.instance
-        .collection('groups')
-        .doc(groupId)
-        .get();
-    final groupName = groupDoc.data()?['groupName'] ?? 'Group';
+    // Single batched read instead of 2 separate reads
+    final names = await _getUserAndGroupNames(currentUserPhone, groupId);
 
     try {
       String? expenseId;
 
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final groupRef = FirebaseFirestore.instance
-            .collection('groups')
-            .doc(groupId);
+      await _firestore.runTransaction((transaction) async {
+        final groupRef = _firestore.collection('groups').doc(groupId);
         final groupSnapshot = await transaction.get(groupRef);
 
         final expenseRef = groupRef.collection('expenses').doc();
@@ -159,27 +174,22 @@ class GroupService {
         transaction.update(groupRef, {'members': updatedMembers});
       });
 
-      // Update friend balances
-      await _updateAllMemberBalances(groupId);
-
-      // Update suggested settlements
       await SettlementService().updateSuggestedSettlements(groupId);
+      await _updateAllMemberBalances(groupId);
 
       await ActivityService().expenseAddedActivity(
         groupId: groupId,
-        groupName: groupName,
+        groupName: names['groupName']!,
         expenseId: expenseId ?? 'unknown',
         expenseTitle: title,
         amount: amount,
         addedByPhone: currentUserPhone,
-        addedByName: userName,
+        addedByName: names['userName']!,
         paidBy: paidBy,
         participants: participants,
       );
 
-      print(
-        'Expense, balances, settlements, and activity created successfully',
-      );
+      print('Expense created successfully');
     } catch (e) {
       print('Error adding expense: $e');
       rethrow;
@@ -196,27 +206,16 @@ class GroupService {
     required Map<String, double> oldPaidBy,
     required Map<String, double> oldParticipants,
   }) async {
-    final currentUserPhone =
-        FirebaseAuth.instance.currentUser?.phoneNumber ?? "";
+    final currentUserPhone = _auth.currentUser?.phoneNumber ?? "";
 
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(currentUserPhone)
-        .get();
-    final userName = userDoc.data()?['name'] ?? 'Someone';
-
-    final groupDoc = await FirebaseFirestore.instance
-        .collection('groups')
-        .doc(groupId)
-        .get();
-    final groupName = groupDoc.data()?['groupName'] ?? 'Group';
+    // Single batched read
+    final names = await _getUserAndGroupNames(currentUserPhone, groupId);
 
     try {
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        DocumentReference groupRef = FirebaseFirestore.instance
+      await _firestore.runTransaction((transaction) async {
+        DocumentReference groupRef = _firestore
             .collection('groups')
             .doc(groupId);
-
         DocumentSnapshot groupSnapshot = await transaction.get(groupRef);
 
         if (!groupSnapshot.exists) {
@@ -224,7 +223,6 @@ class GroupService {
         }
 
         List<dynamic> members = groupSnapshot.get('members') ?? [];
-
         Map<String, double> balanceChanges = {};
 
         // Reverse old balance changes
@@ -278,23 +276,21 @@ class GroupService {
         transaction.update(groupRef, {'members': updatedMembers});
       });
 
-      // Update friend balances
-      await _updateAllMemberBalances(groupId);
-
-      // Update suggested settlements
+      // Background tasks
       await SettlementService().updateSuggestedSettlements(groupId);
+      await _updateAllMemberBalances(groupId);
 
       await ActivityService().expenseEditedActivity(
         groupId: groupId,
-        groupName: groupName,
+        groupName: names['groupName']!,
         expenseId: expenseId,
         expenseTitle: title,
         amount: amount,
         editedByPhone: currentUserPhone,
-        editedByName: userName,
+        editedByName: names['userName']!,
       );
 
-      print('Expense edited, balances and settlements updated successfully');
+      print('Expense edited successfully');
     } catch (e) {
       print('Error: $e');
       rethrow;
@@ -309,27 +305,16 @@ class GroupService {
     required Map<String, double> paidBy,
     required Map<String, double> participants,
   }) async {
-    final currentUserPhone =
-        FirebaseAuth.instance.currentUser?.phoneNumber ?? "";
+    final currentUserPhone = _auth.currentUser?.phoneNumber ?? "";
 
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(currentUserPhone)
-        .get();
-    final userName = userDoc.data()?['name'] ?? 'Someone';
-
-    final groupDoc = await FirebaseFirestore.instance
-        .collection('groups')
-        .doc(groupId)
-        .get();
-    final groupName = groupDoc.data()?['groupName'] ?? 'Group';
+    // Single batched read
+    final names = await _getUserAndGroupNames(currentUserPhone, groupId);
 
     try {
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        DocumentReference groupRef = FirebaseFirestore.instance
+      await _firestore.runTransaction((transaction) async {
+        DocumentReference groupRef = _firestore
             .collection('groups')
             .doc(groupId);
-
         DocumentSnapshot groupSnapshot = await transaction.get(groupRef);
 
         if (!groupSnapshot.exists) {
@@ -337,7 +322,6 @@ class GroupService {
         }
 
         List<dynamic> members = groupSnapshot.get('members') ?? [];
-
         Map<String, double> balanceChanges = {};
 
         // Reverse balance changes
@@ -368,26 +352,23 @@ class GroupService {
             .collection('expenses')
             .doc(expenseId);
         transaction.delete(expenseRef);
-
         transaction.update(groupRef, {'members': updatedMembers});
       });
 
-      // Update friend balances
-      await _updateAllMemberBalances(groupId);
-
-      // Update suggested settlements
+      // Background tasks
       await SettlementService().updateSuggestedSettlements(groupId);
+      await _updateAllMemberBalances(groupId);
 
       await ActivityService().expenseDeletedActivity(
         groupId: groupId,
-        groupName: groupName,
+        groupName: names['groupName']!,
         expenseTitle: expenseTitle,
         amount: amount,
         deletedByPhone: currentUserPhone,
-        deletedByName: userName,
+        deletedByName: names['userName']!,
       );
 
-      print('Expense deleted, balances and settlements updated successfully');
+      print('Expense deleted successfully');
     } catch (e) {
       print('Error: $e');
       rethrow;
@@ -398,24 +379,21 @@ class GroupService {
     required String groupName,
     required List<Map<String, dynamic>> members,
   }) async {
-    final currentUserPhone =
-        FirebaseAuth.instance.currentUser?.phoneNumber ?? "";
+    final currentUserPhone = _auth.currentUser?.phoneNumber ?? "";
 
-    final userDoc = await FirebaseFirestore.instance
+    final userDoc = await _firestore
         .collection('users')
         .doc(currentUserPhone)
         .get();
     final userName = userDoc.data()?['name'] ?? 'You';
 
     try {
-      final groupRef = await FirebaseFirestore.instance
-          .collection('groups')
-          .add({
-            'groupName': groupName,
-            'members': members,
-            'createdAt': FieldValue.serverTimestamp(),
-            'createdBy': currentUserPhone,
-          });
+      final groupRef = await _firestore.collection('groups').add({
+        'groupName': groupName,
+        'members': members,
+        'createdAt': FieldValue.serverTimestamp(),
+        'createdBy': currentUserPhone,
+      });
 
       await ActivityService().createGroupActivity(
         groupId: groupRef.id,
@@ -424,9 +402,61 @@ class GroupService {
         creatorName: userName,
       );
 
-      print('Group and activity created successfully');
+      print('Group created successfully');
     } catch (e) {
       print('Error: $e');
+      rethrow;
+    }
+  }
+
+  /// Add member to group
+  Future<void> addMemberToGroup({
+    required String groupId,
+    required String newMemberPhone,
+    required String addedByPhone,
+  }) async {
+    try {
+      final groupRef = _firestore.collection('groups').doc(groupId);
+      final groupDoc = await groupRef.get();
+
+      if (!groupDoc.exists) {
+        throw Exception('Group not found');
+      }
+
+      final groupData = groupDoc.data()!;
+      final members = List<Map<String, dynamic>>.from(
+        groupData['members'] ?? [],
+      );
+
+      // Check if member already exists
+      if (members.any((m) => m['phoneNumber'] == newMemberPhone)) {
+        throw Exception('Member already exists in group');
+      }
+
+      // Get new member data
+      final memberDoc = await _firestore
+          .collection('users')
+          .doc(newMemberPhone)
+          .get();
+      if (!memberDoc.exists) {
+        throw Exception('User not found');
+      }
+
+      final memberData = memberDoc.data()!;
+      final newMember = {
+        'phoneNumber': newMemberPhone,
+        'name': memberData['name'] ?? 'Unknown',
+        'avatar': memberData['avatar'] ?? '',
+        'balance': 0.0,
+      };
+
+      members.add(newMember);
+
+      await groupRef.update({'members': members});
+
+      print('Member added successfully');
+    } catch (e) {
+      print('Error adding member: $e');
       rethrow;
     }
   }
@@ -434,10 +464,7 @@ class GroupService {
   // Helper method to update friend balances
   Future<void> _updateAllMemberBalances(String groupId) async {
     try {
-      final groupDoc = await FirebaseFirestore.instance
-          .collection('groups')
-          .doc(groupId)
-          .get();
+      final groupDoc = await _firestore.collection('groups').doc(groupId).get();
 
       if (!groupDoc.exists) return;
 
@@ -446,13 +473,11 @@ class GroupService {
         groupData['members'] ?? [],
       );
 
-      print('Updating friend balances for ${members.length} members...');
-
       for (var member in members) {
         final memberPhone = member['phoneNumber'] as String;
         final memberGroups = await getMemberGroups(memberPhone);
 
-        await FriendsBalanceService().recalculateUserFriendBalances(
+        FriendsBalanceService().recalculateUserFriendBalances(
           userPhone: memberPhone,
           groups: memberGroups,
         );
@@ -462,12 +487,17 @@ class GroupService {
     }
   }
 
-  // Helper to get all groups a member belongs to
+  // Cache for member groups to reduce reads
+  final Map<String, List<Map<String, dynamic>>> _memberGroupsCache = {};
+
   Future<List<Map<String, dynamic>>> getMemberGroups(String memberPhone) async {
+    // Check cache first
+    if (_memberGroupsCache.containsKey(memberPhone)) {
+      return _memberGroupsCache[memberPhone]!;
+    }
+
     try {
-      final allGroupsSnapshot = await FirebaseFirestore.instance
-          .collection('groups')
-          .get();
+      final allGroupsSnapshot = await _firestore.collection('groups').get();
 
       final memberGroups = <Map<String, dynamic>>[];
       for (var doc in allGroupsSnapshot.docs) {
@@ -478,6 +508,12 @@ class GroupService {
           memberGroups.add({'id': doc.id, ...data});
         }
       }
+
+      // Cache for 30 seconds
+      _memberGroupsCache[memberPhone] = memberGroups;
+      Future.delayed(const Duration(seconds: 30), () {
+        _memberGroupsCache.remove(memberPhone);
+      });
 
       return memberGroups;
     } catch (e) {

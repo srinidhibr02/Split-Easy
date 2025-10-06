@@ -15,7 +15,7 @@ void showAddExpenseDialog(
     required Map<String, double> participants,
   })
   onAddExpense,
-  required Stream<DocumentSnapshot> Function(String) streamGroupById,
+  required Stream<Map<String, dynamic>> Function(String) streamGroupById,
 }) {
   showDialog(
     context: context,
@@ -38,7 +38,7 @@ class AddExpenseDialog extends StatefulWidget {
     required Map<String, double> participants,
   })
   onAddExpense;
-  final Stream<DocumentSnapshot> Function(String) streamGroupById;
+  final Stream<Map<String, dynamic>> Function(String) streamGroupById;
 
   const AddExpenseDialog({
     super.key,
@@ -220,7 +220,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
             children: [
               _buildHeader(),
               Flexible(
-                child: StreamBuilder<DocumentSnapshot>(
+                child: StreamBuilder<Map<String, dynamic>>(
                   stream: widget.streamGroupById(widget.group["id"]),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) {
@@ -232,8 +232,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                       );
                     }
 
-                    final updatedGroup =
-                        snapshot.data!.data() as Map<String, dynamic>? ?? {};
+                    final updatedGroup = snapshot.data ?? {};
                     final members =
                         (updatedGroup["members"] as List<dynamic>? ?? [])
                             .map((e) => e as Map<String, dynamic>)
@@ -257,6 +256,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                   },
                 ),
               ),
+
               _buildActions(),
             ],
           ),
