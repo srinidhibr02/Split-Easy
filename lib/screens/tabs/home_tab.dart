@@ -312,8 +312,6 @@ class _HomeTabState extends State<HomeTab> {
                               group["groupName"] ?? "Unnamed Group";
                           final memberCount =
                               (group["members"] as List?)?.length ?? 0;
-                          final expensesCount =
-                              (group["expenses"] as List?)?.length ?? 0;
 
                           return _buildGroupCard(
                             context,
@@ -321,7 +319,6 @@ class _HomeTabState extends State<HomeTab> {
                             groupName,
                             balance,
                             memberCount,
-                            expensesCount,
                           );
                         }, childCount: filtered.length),
                       ),
@@ -428,7 +425,6 @@ class _HomeTabState extends State<HomeTab> {
     String groupName,
     double balance,
     int memberCount,
-    int expensesCount,
   ) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -449,7 +445,7 @@ class _HomeTabState extends State<HomeTab> {
                     ),
                   ),
                 ),
-                body: GroupSettlementWidget(
+                body: ModernSettlementScreen(
                   group: group,
                   currentUserPhone:
                       _authServices.currentUser?.phoneNumber as String,
@@ -490,7 +486,7 @@ class _HomeTabState extends State<HomeTab> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      "$memberCount members • $expensesCount expenses",
+                      "$memberCount members",
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade600,

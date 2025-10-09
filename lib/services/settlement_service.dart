@@ -1,11 +1,75 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:split_easy/dataModels/dataModels.dart';
-import 'package:split_easy/screens/settlement.dart';
+import 'package:split_easy/services/activity_service.dart';
 import 'package:split_easy/services/friend_balance_service.dart';
+import 'package:split_easy/services/settlement_calculator.dart';
 
 class SettlementService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FriendsBalanceService _friendsBalanceService = FriendsBalanceService();
+
+  static List<Settlement> calculateSettlements(Map<String, dynamic> group) {
+    final members =
+        (group["members"] as List<dynamic>?)
+            ?.map((e) => e as Map<String, dynamic>)
+            .toList() ??
+        [];
+
+    List<Map<String, dynamic>> debtors = [];
+    List<Map<String, dynamic>> creditors = [];
+
+    for (var member in members) {
+      final balance = (member["balance"] ?? 0.0).toDouble();
+      final memberData = {
+        "phoneNumber": member["phoneNumber"],
+        "name": member["name"],
+        "balance": balance.abs(),
+      };
+      if (balance < -0.01) {
+        debtors.add(memberData);
+      } else if (balance > 0.01) {
+        creditors.add(memberData);
+      }
+    }
+
+    debtors.sort(
+      (a, b) => (b["balance"] as double).compareTo(a["balance"] as double),
+    );
+    creditors.sort(
+      (a, b) => (b["balance"] as double).compareTo(a["balance"] as double),
+    );
+
+    List<Settlement> settlements = [];
+    int i = 0, j = 0;
+
+    while (i < debtors.length && j < creditors.length) {
+      final debtor = debtors[i];
+      final creditor = creditors[j];
+
+      final debtAmount = debtor["balance"] as double;
+      final creditAmount = creditor["balance"] as double;
+      final settleAmount = debtAmount < creditAmount
+          ? debtAmount
+          : creditAmount;
+
+      settlements.add(
+        Settlement(
+          fromPhone: debtor["phoneNumber"],
+          fromName: debtor["name"],
+          toPhone: creditor["phoneNumber"],
+          toName: creditor["name"],
+          amount: settleAmount,
+        ),
+      );
+
+      debtor["balance"] = debtAmount - settleAmount;
+      creditor["balance"] = creditAmount - settleAmount;
+
+      if (debtor["balance"] < 0.01) i++;
+      if (creditor["balance"] < 0.01) j++;
+    }
+    return settlements;
+  }
 
   Future<void> recordSettlement({
     required String groupId,
@@ -57,18 +121,7 @@ class SettlementService {
 
         transaction.update(groupRef, {'members': members});
 
-        final settlementRef = groupRef.collection('settlements').doc();
-        transaction.set(settlementRef, {
-          'fromPhone': fromPhone,
-          'fromName': fromName,
-          'toPhone': toPhone,
-          'toName': toName,
-          'amount': amount,
-          'timestamp': FieldValue.serverTimestamp(),
-          'recordedAt': DateTime.now().toIso8601String(),
-        });
-
-        final activityRef = groupRef.collection('activity').doc();
+        final activityRef = groupRef.collection('settlements').doc();
         transaction.set(activityRef, {
           'type': 'settlement',
           'fromPhone': fromPhone,
@@ -92,6 +145,15 @@ class SettlementService {
       await updateSuggestedSettlements(groupId);
 
       print('Settlement recorded and friend balances updated');
+
+      ActivityService().recordSettlementActivity(
+        groupId: groupId,
+        fromPhone: fromPhone,
+        toPhone: toPhone,
+        amount: amount,
+        fromName: fromName,
+        toName: toName,
+      );
     } catch (e) {
       throw Exception('Failed to record settlement: $e');
     }

@@ -59,6 +59,11 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
   bool _isLoading = false;
   String? _titleError;
   String? _amountError;
+  String? _payersError;
+  String? _participantsError;
+  String? _sumError;
+  String? _amountRequiredError;
+  String? _submitError;
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
 
@@ -89,13 +94,26 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
     if (_amountError != null) {
       final amount = double.tryParse(_amountController.text.trim());
       if (amount != null && amount > 0) {
-        setState(() => _amountError = null);
+        setState(() {
+          _amountError = null;
+          _amountRequiredError = null;
+        });
       }
     }
   }
 
+  void _clearValidationErrors() {
+    setState(() {
+      _payersError = null;
+      _participantsError = null;
+      _sumError = null;
+      _submitError = null;
+    });
+  }
+
   bool _validateForm() {
     bool isValid = true;
+    _clearValidationErrors();
 
     if (_titleController.text.trim().isEmpty) {
       setState(() => _titleError = "Title is required");
@@ -109,15 +127,13 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
     }
 
     if (_selectedPayers.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(_buildErrorSnackBar("Please select at least one payer"));
+      setState(() => _payersError = "Please select at least one payer");
       isValid = false;
     }
 
     if (_selectedParticipants.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        _buildErrorSnackBar("Please select at least one participant"),
+      setState(
+        () => _participantsError = "Please select at least one participant",
       );
       isValid = false;
     }
@@ -126,31 +142,15 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
     if (amount != null && _selectedPayers.isNotEmpty) {
       final payersSum = _selectedPayers.values.reduce((a, b) => a + b);
       if ((payersSum - amount).abs() > 0.01) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          _buildErrorSnackBar(
-            "Payers total (₹${payersSum.toStringAsFixed(2)}) must equal expense amount",
-          ),
+        setState(
+          () => _sumError =
+              "Payers total (₹${payersSum.toStringAsFixed(2)}) must equal expense amount",
         );
         isValid = false;
       }
     }
 
     return isValid;
-  }
-
-  SnackBar _buildErrorSnackBar(String message) {
-    return SnackBar(
-      content: Row(
-        children: [
-          const Icon(Icons.error_outline, color: Colors.white),
-          const SizedBox(width: 12),
-          Expanded(child: Text(message)),
-        ],
-      ),
-      backgroundColor: Colors.red,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    );
   }
 
   Future<void> _handleSubmit() async {
@@ -174,24 +174,26 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
         SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 12),
-              const Text("Expense added successfully!"),
+              const Icon(Icons.check_circle, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              const Text(
+                "Expense added successfully!",
+                style: TextStyle(fontSize: 13),
+              ),
             ],
           ),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(_buildErrorSnackBar("Failed to add expense"));
+      setState(() {
+        _isLoading = false;
+        _submitError = "Failed to add expense";
+      });
     }
   }
 
@@ -208,7 +210,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
     return ScaleTransition(
       scale: _scaleAnimation,
       child: Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Container(
           width: MediaQuery.of(context).size.width * 0.9,
           constraints: BoxConstraints(
@@ -225,7 +227,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                     if (!snapshot.hasData) {
                       return Center(
                         child: Padding(
-                          padding: const EdgeInsets.all(32),
+                          padding: const EdgeInsets.all(24),
                           child: CircularProgressIndicator(color: primary),
                         ),
                       );
@@ -238,24 +240,34 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                             .toList();
 
                     return SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildTitleField(),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 14),
                           _buildAmountField(),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 16),
                           _buildPayersSection(members),
-                          const SizedBox(height: 24),
+                          if (_payersError != null)
+                            _buildErrorText(_payersError!),
+                          if (_amountRequiredError != null)
+                            _buildErrorText(_amountRequiredError!),
+                          if (_sumError != null) _buildErrorText(_sumError!),
+                          const SizedBox(height: 16),
                           _buildParticipantsSection(members),
+                          if (_participantsError != null)
+                            _buildErrorText(_participantsError!),
+                          if (_submitError != null) ...[
+                            const SizedBox(height: 8),
+                            _buildErrorText(_submitError!),
+                          ],
                         ],
                       ),
                     );
                   },
                 ),
               ),
-
               _buildActions(),
             ],
           ),
@@ -266,7 +278,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [primary, primary.withOpacity(0.8)],
@@ -274,49 +286,41 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
           end: Alignment.bottomRight,
         ),
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
         ),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
               Icons.receipt_long,
               color: Colors.white,
-              size: 28,
+              size: 22,
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Add Expense",
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  "Split expenses with your group",
-                  style: TextStyle(fontSize: 13, color: Colors.white70),
-                ),
-              ],
+            child: Text(
+              "Add Expense",
+              style: TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
           ),
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close, color: Colors.white),
+            icon: const Icon(Icons.close, color: Colors.white, size: 22),
             tooltip: 'Close',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
           ),
         ],
       ),
@@ -329,28 +333,33 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
       children: [
         Row(
           children: [
-            Icon(Icons.title, size: 20, color: primary),
-            const SizedBox(width: 8),
+            Icon(Icons.title, size: 18, color: primary),
+            const SizedBox(width: 6),
             const Text(
               "Expense Title",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         TextField(
           controller: _titleController,
           enabled: !_isLoading,
           decoration: InputDecoration(
             hintText: "e.g., Dinner at restaurant",
+            hintStyle: const TextStyle(fontSize: 14),
             filled: true,
             fillColor: Colors.grey[50],
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
                 color: _titleError != null
                     ? Colors.red[300]!
@@ -359,14 +368,18 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
               ),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(color: primary, width: 2),
             ),
             errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(color: Colors.red[300]!, width: 1.5),
             ),
-            prefixIcon: Icon(Icons.edit_outlined, color: Colors.grey[600]),
+            prefixIcon: Icon(
+              Icons.edit_outlined,
+              color: Colors.grey[600],
+              size: 20,
+            ),
           ),
         ),
         if (_titleError != null) _buildErrorText(_titleError!),
@@ -380,15 +393,15 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
       children: [
         Row(
           children: [
-            Icon(Icons.currency_rupee, size: 20, color: primary),
-            const SizedBox(width: 8),
+            Icon(Icons.currency_rupee, size: 18, color: primary),
+            const SizedBox(width: 6),
             const Text(
               "Amount",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         TextField(
           controller: _amountController,
           enabled: !_isLoading,
@@ -396,17 +409,22 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
           ],
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           decoration: InputDecoration(
             hintText: "0.00",
+            hintStyle: const TextStyle(fontSize: 18),
             filled: true,
             fillColor: Colors.grey[50],
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
                 color: _amountError != null
                     ? Colors.red[300]!
@@ -415,12 +433,12 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
               ),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(color: primary, width: 2),
             ),
             prefixText: "₹ ",
             prefixStyle: TextStyle(
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
               color: Colors.grey[700],
             ),
@@ -439,30 +457,35 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
           children: [
             Icon(
               Icons.account_balance_wallet,
-              size: 20,
+              size: 18,
               color: Colors.green[700],
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             const Text(
               "Who Paid?",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         InkWell(
           onTap: _isLoading
               ? null
               : () async {
-                  // Get the current amount when dialog opens
                   final currentAmount =
                       double.tryParse(_amountController.text.trim()) ?? 0;
 
                   if (currentAmount <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      _buildErrorSnackBar("Please enter an amount first"),
+                    setState(
+                      () =>
+                          _amountRequiredError = "Please enter an amount first",
                     );
                     return;
+                  }
+
+                  // Clear the amount required error if amount is valid
+                  if (_amountRequiredError != null) {
+                    setState(() => _amountRequiredError = null);
                   }
 
                   final result = await showDialog(
@@ -474,30 +497,32 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                     ),
                   );
                   if (result != null) {
-                    setState(
-                      () => _selectedPayers = Map<String, double>.from(result),
-                    );
+                    setState(() {
+                      _selectedPayers = Map<String, double>.from(result);
+                      // Clear payers error when selection is made
+                      _payersError = null;
+                    });
                   }
                 },
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           child: Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.green[50],
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               border: Border.all(color: Colors.green[200]!, width: 1.5),
             ),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: Colors.green[100],
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Icon(Icons.person, color: Colors.green[700], size: 20),
+                  child: Icon(Icons.person, color: Colors.green[700], size: 18),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     _selectedPayers.isEmpty
@@ -507,13 +532,13 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                       color: _selectedPayers.isEmpty
                           ? Colors.grey[600]
                           : Colors.black87,
-                      fontSize: 15,
+                      fontSize: 14,
                     ),
                   ),
                 ),
                 Icon(
                   Icons.arrow_forward_ios,
-                  size: 16,
+                  size: 14,
                   color: Colors.green[700],
                 ),
               ],
@@ -521,7 +546,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
           ),
         ),
         if (_selectedPayers.isNotEmpty) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           _buildSelectedMembers(_selectedPayers, members, Colors.green),
         ],
       ],
@@ -536,15 +561,15 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
       children: [
         Row(
           children: [
-            Icon(Icons.people, size: 20, color: Colors.orange[700]),
-            const SizedBox(width: 8),
+            Icon(Icons.people, size: 18, color: Colors.orange[700]),
+            const SizedBox(width: 6),
             const Text(
               "Split Between",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         InkWell(
           onTap: _isLoading
               ? null
@@ -558,32 +583,32 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                     ),
                   );
                   if (result != null) {
-                    setState(
-                      () => _selectedParticipants = Map<String, double>.from(
-                        result,
-                      ),
-                    );
+                    setState(() {
+                      _selectedParticipants = Map<String, double>.from(result);
+                      // Clear participants error when selection is made
+                      _participantsError = null;
+                    });
                   }
                 },
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           child: Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.orange[50],
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               border: Border.all(color: Colors.orange[200]!, width: 1.5),
             ),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: Colors.orange[100],
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Icon(Icons.group, color: Colors.orange[700], size: 20),
+                  child: Icon(Icons.group, color: Colors.orange[700], size: 18),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     _selectedParticipants.isEmpty
@@ -593,13 +618,13 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                       color: _selectedParticipants.isEmpty
                           ? Colors.grey[600]
                           : Colors.black87,
-                      fontSize: 15,
+                      fontSize: 14,
                     ),
                   ),
                 ),
                 Icon(
                   Icons.arrow_forward_ios,
-                  size: 16,
+                  size: 14,
                   color: Colors.orange[700],
                 ),
               ],
@@ -607,7 +632,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
           ),
         ),
         if (_selectedParticipants.isNotEmpty) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           _buildSelectedMembers(_selectedParticipants, members, Colors.orange),
         ],
       ],
@@ -620,10 +645,10 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
     MaterialColor color,
   ) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: color[50],
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color[200]!),
       ),
       child: Column(
@@ -632,55 +657,55 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
           Text(
             "Selected (${selected.length})",
             style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
               color: color[900],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           ...selected.entries.map((entry) {
             final member = members.firstWhere(
               (m) => m["phoneNumber"] == entry.key,
               orElse: () => {"name": "Unknown"},
             );
             return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.symmetric(vertical: 3),
               child: Row(
                 children: [
                   CircleAvatar(
-                    radius: 16,
+                    radius: 14,
                     backgroundColor: color[100],
                     child: Text(
                       member["name"][0].toUpperCase(),
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                         color: color[900],
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       member["name"],
-                      style: const TextStyle(fontSize: 14),
+                      style: const TextStyle(fontSize: 13),
                     ),
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+                      horizontal: 8,
+                      vertical: 3,
                     ),
                     decoration: BoxDecoration(
                       color: color[100],
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       "₹${entry.value.toStringAsFixed(2)}",
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: color[900],
-                        fontSize: 13,
+                        fontSize: 12,
                       ),
                     ),
                   ),
@@ -695,17 +720,19 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
 
   Widget _buildErrorText(String error) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8, left: 4),
+      padding: const EdgeInsets.only(top: 6, left: 4),
       child: Row(
         children: [
-          Icon(Icons.error_outline, size: 14, color: Colors.red[700]),
-          const SizedBox(width: 6),
-          Text(
-            error,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.red[700],
-              fontWeight: FontWeight.w500,
+          Icon(Icons.error_outline, size: 13, color: Colors.red[700]),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              error,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.red[700],
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -715,12 +742,12 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
 
   Widget _buildActions() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(24),
-          bottomRight: Radius.circular(24),
+          bottomLeft: Radius.circular(20),
+          bottomRight: Radius.circular(20),
         ),
         boxShadow: [
           BoxShadow(
@@ -736,23 +763,23 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
             child: OutlinedButton(
               onPressed: _isLoading ? null : () => Navigator.pop(context),
               style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 13),
                 side: BorderSide(color: Colors.grey[300]!),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
               child: const Text(
                 "Cancel",
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 15,
                   fontWeight: FontWeight.w600,
                   color: Colors.black54,
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             flex: 2,
             child: ElevatedButton(
@@ -760,16 +787,16 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
               style: ElevatedButton.styleFrom(
                 backgroundColor: primary,
                 disabledBackgroundColor: primary.withOpacity(0.6),
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 13),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
               child: _isLoading
                   ? const SizedBox(
-                      height: 20,
-                      width: 20,
+                      height: 18,
+                      width: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
@@ -780,15 +807,15 @@ class _AddExpenseDialogState extends State<AddExpenseDialog>
                       children: [
                         Icon(
                           Icons.add_circle_outline,
-                          size: 20,
+                          size: 18,
                           color: Colors.white,
                         ),
-                        SizedBox(width: 8),
+                        SizedBox(width: 6),
                         Text(
                           "Add Expense",
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 16,
+                            fontSize: 15,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
