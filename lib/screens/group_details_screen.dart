@@ -31,24 +31,29 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
     final groupId = widget.group["id"];
 
     return Scaffold(
+      backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.white,
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [primary, primary.withAlpha((255 * 0.7).round())],
+                  colors: [primary, primary.withOpacity(0.7)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
-                color: white,
                 getPurposeIcon(widget.group["purpose"]),
-                size: 20,
+                color: Colors.white,
+                size: 22,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -58,14 +63,15 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                     style: const TextStyle(
                       color: primary,
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: 17,
                     ),
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     widget.group["purpose"] ?? "",
                     style: TextStyle(
-                      color: primary.withAlpha((255 * 0.7).round()),
-                      fontSize: 11,
+                      color: primary.withOpacity(0.7),
+                      fontSize: 12,
                     ),
                   ),
                 ],
@@ -74,9 +80,10 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
           ],
         ),
       ),
+
       body: Column(
         children: [
-          // Compact Summary Card
+          // ✨ Summary Card
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection("groups")
@@ -96,82 +103,52 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                 }
               }
 
-              Widget _verticalDivider() =>
-                  Container(width: 1, height: 35, color: Colors.grey.shade300);
-
-              Widget _compactSummaryItem(
-                IconData icon,
-                String value,
-                String label,
-                Color color,
-              ) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, color: color.withOpacity(0.9), size: 26),
-                      const SizedBox(height: 6),
-                      Text(
-                        value,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
               return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 padding: const EdgeInsets.symmetric(
                   vertical: 20,
-                  horizontal: 16,
+                  horizontal: 18,
                 ),
                 decoration: BoxDecoration(
-                  color: secondary.withAlpha((255 * 0.25).round()),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200, width: 1.2),
+                  gradient: LinearGradient(
+                    colors: [Colors.white, Colors.white.withOpacity(0.9)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withAlpha((255 * 0.05).round()),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
+                      color: Colors.grey.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _compactSummaryItem(
+                    _summaryItem(
                       Icons.people,
                       "$memberCount",
                       "Members",
                       Colors.indigoAccent,
                     ),
-                    _verticalDivider(),
-                    _compactSummaryItem(
+                    _divider(),
+                    _summaryItem(
                       Icons.receipt_long,
                       "$expenseCount",
                       "Expenses",
                       Colors.teal,
                     ),
-                    _verticalDivider(),
-                    _compactSummaryItem(
+                    _divider(),
+                    _summaryItem(
                       Icons.currency_rupee,
                       totalAmount.toStringAsFixed(0),
                       "Total",
-                      Colors.deepOrangeAccent,
+                      Colors.orange,
                     ),
                   ],
                 ),
@@ -179,43 +156,44 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
             },
           ),
 
+          // ✨ Modern Action Buttons Row
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
                 Expanded(
-                  child: _actionButton(
+                  child: _modernButton(
                     icon: Icons.person_add_alt_1,
-                    label: "Add-Member",
-                    color: Colors.blue,
+                    label: "Add Member",
+                    color: Colors.blueAccent,
                     onPressed: () => _showAddMemberDialog(context),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: _actionButton(
+                  child: _modernButton(
                     icon: Icons.add_circle_outline,
                     label: "Expense",
-                    color: Colors.green,
+                    color: Colors.greenAccent.shade700,
                     onPressed: () =>
                         _showAddExpenseDialog(context, widget.group),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: _actionButton(
+                  child: _modernButton(
                     icon: Icons.groups_2,
                     label: "Members",
-                    color: Colors.purple,
+                    color: Colors.purpleAccent,
                     onPressed: () => _showMembersDialog(context, widget.group),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: _actionButton(
+                  child: _modernButton(
                     icon: Icons.payments_outlined,
                     label: "Settlement",
-                    color: Colors.orange,
+                    color: Colors.orangeAccent.shade700,
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -226,7 +204,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                               backgroundColor: primary,
                               foregroundColor: Colors.white,
                             ),
-                            body: GroupSettlementWidget(
+                            body: ModernSettlementScreen(
                               group: widget.group,
                               currentUserPhone:
                                   authServices.currentUser!.phoneNumber
@@ -242,19 +220,19 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
             ),
           ),
 
-          const SizedBox(height: 15),
+          const SizedBox(height: 10),
 
-          // Compact Section Header
+          // ✨ Recent Expenses Header
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Row(
               children: [
-                const Icon(Icons.history, color: primary, size: 18),
+                const Icon(Icons.history_rounded, color: primary, size: 20),
                 const SizedBox(width: 6),
                 const Text(
                   "Recent Expenses",
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 17,
                     fontWeight: FontWeight.bold,
                     color: primary,
                   ),
@@ -272,8 +250,8 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                       "$count total",
                       style: const TextStyle(
                         color: primary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
                       ),
                     );
                   },
@@ -282,9 +260,9 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
             ),
           ),
 
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
 
-          // Compact Expenses List
+          // ✨ Expense List
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -299,30 +277,10 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                 }
 
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          size: 60,
-                          color: Colors.grey.shade300,
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          "No expenses yet",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          "Add your first expense!",
-                          style: TextStyle(fontSize: 13, color: Colors.grey),
-                        ),
-                      ],
+                  return const Center(
+                    child: Text(
+                      "No expenses yet. Add your first one!",
+                      style: TextStyle(color: Colors.grey),
                     ),
                   );
                 }
@@ -333,385 +291,79 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                     .toList();
 
                 return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: expenses.length,
                   itemBuilder: (context, index) {
                     final expenseDoc = expenses[index];
                     final expense = expenseDoc.data() as Map<String, dynamic>;
-                    final expenseId = expenseDoc.id;
-
                     final title = expense["title"] ?? "";
                     final amount = expense["amount"]?.toDouble() ?? 0;
-                    final createdAt = expense["createdAt"];
 
-                    String getExpenseDate() {
-                      if (createdAt == null) return "";
-                      try {
-                        final DateTime created = (createdAt as dynamic)
-                            .toDate();
-                        final now = DateTime.now();
-                        final difference = now.difference(created);
-
-                        if (difference.inDays == 0) {
-                          return "Today";
-                        } else if (difference.inDays == 1) {
-                          return "Yesterday";
-                        } else if (difference.inDays < 7) {
-                          return "${difference.inDays}d ago";
-                        } else {
-                          return "${created.day}/${created.month}/${created.year}";
-                        }
-                      } catch (e) {
-                        return "";
-                      }
-                    }
-
-                    final paidByMap = Map<String, double>.from(
-                      expense["paidBy"] ?? {},
-                    );
-                    final participantsMap = Map<String, double>.from(
-                      expense["participants"] ?? {},
-                    );
-
-                    Widget buildCompactMemberChips(
-                      Map<String, double> memberAmounts,
-                      Color chipColor,
-                    ) {
-                      if (memberAmounts.isEmpty) return const SizedBox.shrink();
-
-                      return Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: memberAmounts.entries.map((entry) {
-                          final phoneNumber = entry.key;
-                          final memberAmount = entry.value;
-
-                          final member = members.firstWhere(
-                            (m) => m["phoneNumber"] == phoneNumber,
-                            orElse: () => {"name": phoneNumber},
-                          );
-
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: chipColor,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: chipColor.withOpacity(0.5),
-                              ),
-                            ),
-                            child: Text(
-                              "${member["name"] ?? "?"} • ₹${memberAmount.toStringAsFixed(0)}",
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                          );
-                        }).toList(),
-                      );
-                    }
-
-                    return Card(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.08),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                      elevation: 1,
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: Theme(
-                        data: Theme.of(
-                          context,
-                        ).copyWith(dividerColor: Colors.transparent),
-                        child: ExpansionTile(
-                          tilePadding: const EdgeInsets.symmetric(
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        leading: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [primary, primary.withOpacity(0.7)],
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding: const EdgeInsets.all(8),
+                          child: const Icon(
+                            Icons.receipt_long,
+                            color: Colors.white,
+                          ),
+                        ),
+                        title: Text(
+                          title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14.5,
+                          ),
+                        ),
+                        subtitle: const Text(
+                          "Tap to view details",
+                          style: TextStyle(fontSize: 12, color: Colors.black54),
+                        ),
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(
                             horizontal: 12,
-                            vertical: 8,
+                            vertical: 6,
                           ),
-                          childrenPadding: const EdgeInsets.fromLTRB(
-                            12,
-                            0,
-                            12,
-                            12,
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(20),
                           ),
-                          leading: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.blue.shade400,
-                                  Colors.blue.shade600,
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(
-                              Icons.receipt,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                          title: Text(
-                            title,
-                            style: const TextStyle(
-                              fontSize: 14,
+                          child: Text(
+                            "₹${amount.toStringAsFixed(0)}",
+                            style: TextStyle(
+                              color: Colors.green.shade800,
                               fontWeight: FontWeight.bold,
+                              fontSize: 13,
                             ),
                           ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 3),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.calendar_today,
-                                  size: 10,
-                                  color: Colors.grey.shade600,
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  getExpenseDate(),
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Icon(
-                                  Icons.people,
-                                  size: 10,
-                                  color: Colors.grey.shade600,
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  "${participantsMap.length}",
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.green.shade50,
-                                  Colors.green.shade100,
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.green.shade300),
-                            ),
-                            child: Text(
-                              "₹${amount.toStringAsFixed(0)}",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green.shade700,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                          children: [
-                            const Divider(height: 16),
-
-                            // Paid By Section
-                            if (paidByMap.isNotEmpty) ...[
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(5),
-                                    decoration: BoxDecoration(
-                                      color: Colors.green.shade100,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Icon(
-                                      Icons.account_balance_wallet,
-                                      size: 14,
-                                      color: Colors.green.shade700,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  const Text(
-                                    "Paid By:",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              buildCompactMemberChips(
-                                paidByMap,
-                                Colors.green.shade50,
-                              ),
-                              const SizedBox(height: 12),
-                            ],
-
-                            // Participants Section
-                            if (participantsMap.isNotEmpty) ...[
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(5),
-                                    decoration: BoxDecoration(
-                                      color: Colors.orange.shade100,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Icon(
-                                      Icons.people,
-                                      size: 14,
-                                      color: Colors.orange.shade700,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  const Text(
-                                    "Split:",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              buildCompactMemberChips(
-                                participantsMap,
-                                Colors.orange.shade50,
-                              ),
-                              const SizedBox(height: 12),
-                            ],
-
-                            const Divider(height: 8),
-                            const SizedBox(height: 6),
-
-                            // Compact Action buttons
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                TextButton.icon(
-                                  onPressed: () {
-                                    _showEditExpenseDialog(
-                                      context,
-                                      widget.group["id"],
-                                      expenseId,
-                                      expense,
-                                    );
-                                  },
-                                  icon: const Icon(Icons.edit, size: 16),
-                                  label: const Text(
-                                    "Edit",
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.blue,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                TextButton.icon(
-                                  onPressed: () async {
-                                    final confirm = await showDialog<bool>(
-                                      context: context,
-                                      builder: (_) => AlertDialog(
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                        ),
-                                        title: const Row(
-                                          children: [
-                                            Icon(
-                                              Icons.warning_amber_rounded,
-                                              color: Colors.orange,
-                                            ),
-                                            SizedBox(width: 8),
-                                            Text("Delete Expense?"),
-                                          ],
-                                        ),
-                                        content: Text(
-                                          "Delete '$title'?\n\nThis will reverse all balance changes.",
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, false),
-                                            child: const Text("Cancel"),
-                                          ),
-                                          ElevatedButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, true),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.red,
-                                              foregroundColor: Colors.white,
-                                            ),
-                                            child: const Text("Delete"),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-
-                                    if (confirm == true) {
-                                      try {
-                                        expenseService
-                                            .deleteExpenseWithActivity(
-                                              groupId: groupId,
-                                              expenseId: expenseId,
-                                              expenseTitle: title,
-                                              amount: amount,
-                                              paidBy: paidByMap,
-                                              participants: participantsMap,
-                                            );
-
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Expense deleted successfully',
-                                              ),
-                                              backgroundColor: Colors.green,
-                                            ),
-                                          );
-                                        }
-                                      } catch (e) {
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text('Error: $e'),
-                                              backgroundColor: Colors.red,
-                                            ),
-                                          );
-                                        }
-                                      }
-                                    }
-                                  },
-                                  icon: const Icon(Icons.delete, size: 16),
-                                  label: const Text(
-                                    "Delete",
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.red,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                        ),
+                        onTap: () => _showEditExpenseDialog(
+                          context,
+                          widget.group["id"],
+                          expenseDoc.id,
+                          expense,
                         ),
                       ),
                     );
@@ -722,74 +374,76 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          _showAddExpenseDialog(context, widget.group);
-        },
-        backgroundColor: primary,
-        foregroundColor: Colors.white,
-        child: const Icon(Icons.add),
+
+      // ✨ Floating Action Button
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 22.0, right: 20.0),
+        child: FloatingActionButton(
+          onPressed: () {
+            _showAddExpenseDialog(context, widget.group);
+          },
+          backgroundColor: primary,
+          foregroundColor: Colors.white,
+          elevation: 10,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: const Icon(Icons.add_rounded, size: 30),
+        ),
       ),
     );
   }
 
-  Widget _compactSummaryItem(
-    IconData icon,
-    String value,
-    String label,
-    Color color,
-  ) {
+  Widget _divider() =>
+      Container(height: 35, width: 1, color: Colors.grey.shade300);
+
+  Widget _summaryItem(IconData icon, String value, String label, Color color) {
     return Column(
       children: [
-        Icon(icon, color: Colors.white, size: 18),
+        Icon(icon, color: color, size: 26),
         const SizedBox(height: 4),
         Text(
           value,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
         ),
         Text(
           label,
-          style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
         ),
       ],
     );
   }
 
-  Widget _actionButton({
+  // ✨ Modern Button Widget
+  Widget _modernButton({
     required IconData icon,
     required String label,
     required Color color,
     required VoidCallback onPressed,
   }) {
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3), width: 1),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color.withOpacity(0.95),
+        elevation: 6,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shadowColor: color.withOpacity(0.4),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 22),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -797,68 +451,534 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
   void _showMembersDialog(BuildContext context, Map<String, dynamic> group) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Group Members"),
-        content: StreamBuilder(
-          stream: streams.streamGroupById(group["id"]),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final groupData = snapshot.data!;
-            final members = List<Map<String, dynamic>>.from(
-              groupData["members"] ?? [],
-            );
-
-            if (members.isEmpty) {
-              return const Text("No members added yet.");
-            }
-
-            return SizedBox(
-              width: double.maxFinite,
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: members.length,
-                itemBuilder: (context, index) {
-                  final member = members[index];
-                  final displayName = member["name"] ?? member["phoneNumber"];
-                  final phone = member["phoneNumber"] ?? "Unknown";
-
-                  return ListTile(
-                    leading: member["avatar"] != null
-                        ? CircleAvatar(
-                            backgroundImage: NetworkImage(member["avatar"]),
-                          )
-                        : const Icon(Icons.person),
-                    title: Text(displayName),
-                    subtitle: Text(phone),
-                  );
-                },
-              ),
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Close"),
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.85,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.7,
           ),
-        ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [primary, primary.withOpacity(0.8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.group,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Group Members",
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            group["groupName"] ?? "Unknown Group",
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Members List
+              Flexible(
+                child: StreamBuilder(
+                  stream: streams.streamGroupById(group["id"]),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(32),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+                    }
+
+                    final groupData = snapshot.data!;
+                    final members = List<Map<String, dynamic>>.from(
+                      groupData["members"] ?? [],
+                    );
+
+                    if (members.isEmpty) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.group_off,
+                                size: 48,
+                                color: Colors.grey,
+                              ),
+                              SizedBox(height: 16),
+                              Text(
+                                "No members added yet",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shrinkWrap: true,
+                      itemCount: members.length,
+                      itemBuilder: (context, index) {
+                        final member = members[index];
+                        final displayName =
+                            member["name"] ?? member["phoneNumber"];
+                        final phone = member["phoneNumber"] ?? "Unknown";
+                        final isCurrentUser =
+                            phone == authServices.currentUser?.phoneNumber;
+
+                        // Inside ListView.builder’s itemBuilder:
+                        return Container(
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.grey[200]!,
+                              width: 1,
+                            ),
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            leading:
+                                (member["avatar"] != null &&
+                                    member["avatar"] != "default_avatar" &&
+                                    member["avatar"].toString().isNotEmpty)
+                                ? CircleAvatar(
+                                    backgroundImage: NetworkImage(
+                                      member["avatar"],
+                                    ),
+                                    radius: 24,
+                                  )
+                                : CircleAvatar(
+                                    backgroundImage: const AssetImage(
+                                      'images/default_avatar.png',
+                                    ),
+                                    backgroundColor: Colors.grey[200],
+                                    radius: 24,
+                                  ),
+
+                            title: Text(
+                              displayName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                            ),
+                            subtitle: Text(
+                              phone,
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                            trailing: !isCurrentUser
+                                ? IconButton(
+                                    icon: Icon(
+                                      Icons.delete,
+                                      color: Colors.red.shade600,
+                                    ),
+                                    onPressed: () => _confirmRemoveMember(
+                                      context,
+                                      group["id"],
+                                      member,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+
+              // Footer Actions
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(20),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showAddMemberDialog(context),
+                        icon: Icon(Icons.person_add, color: primary),
+                        label: Text(
+                          "Add Member",
+                          style: TextStyle(
+                            color: primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: BorderSide(color: primary),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primary,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          "Done",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
+  }
+
+  // Add this confirmation method for removing members
+  void _confirmRemoveMember(
+    BuildContext context,
+    String groupId,
+    Map<String, dynamic> member,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 60, vertical: 24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 400),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.person_remove,
+                  color: Colors.red.shade600,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                "Remove Member?",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Are you sure you want to remove ${member["name"]} from this group?",
+                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: BorderSide(color: Colors.grey[300]!),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade600,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text(
+                        "Remove",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // Check for pending suggestedSettlements
+    final groupDoc = FirebaseFirestore.instance
+        .collection('groups')
+        .doc(groupId);
+    final fromQuery = await groupDoc
+        .collection('suggestedSettlements')
+        .where('fromPhone', isEqualTo: member['phoneNumber'])
+        .limit(1)
+        .get();
+    final toQuery = await groupDoc
+        .collection('suggestedSettlements')
+        .where('toPhone', isEqualTo: member['phoneNumber'])
+        .limit(1)
+        .get();
+    final hasSettlements = fromQuery.docs.isNotEmpty || toQuery.docs.isNotEmpty;
+
+    if (hasSettlements) {
+      final warn = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 60,
+            vertical: 24,
+          ),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.orange.shade700,
+                    size: 30,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  "Pending Settlements",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "${member["name"]} has pending settlements in this group. Removing them will delete those records. Continue?",
+                  style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: BorderSide(color: Colors.grey[300]!),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text(
+                          "Cancel",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade700,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text(
+                          "Remove",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (warn != true) return;
+    }
+
+    try {
+      await groupService.removeMemberFromGroup(
+        groupId: groupId,
+        memberPhoneNumber: member["phoneNumber"],
+      );
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text('${member["name"]} removed successfully!'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Failed to remove member: $e')),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    }
   }
 
   void _showAddMemberDialog(BuildContext context) {
     showAddMemberDialog(
       context,
       groupId: widget.group["id"],
-      onAddMember: (phoneNumber) async {
+      onAddMember: (phoneNumber, {String? customName}) async {
         final whoAdded = authServices.currentUser?.phoneNumber;
-        await firestoreServices.addMemberToGroup(
+        await groupService.addMemberToGroup(
           groupId: widget.group["id"],
           newMemberPhoneNumber: phoneNumber,
           addedByPhoneNumber: whoAdded as String,
+          customName: customName, // Pass customName if exists
         );
       },
     );
@@ -919,6 +1039,24 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
               participants: participants,
               oldPaidBy: oldPaidBy,
               oldParticipants: oldParticipants,
+            );
+          },
+      onDeleteExpense:
+          ({
+            required String groupId,
+            required String expenseId,
+            required String expenseTitle,
+            required double amount,
+            required Map<String, double> paidBy,
+            required Map<String, double> participants,
+          }) async {
+            await expenseService.deleteExpenseWithActivity(
+              groupId: groupId,
+              expenseId: expenseId,
+              expenseTitle: expenseTitle,
+              amount: amount,
+              paidBy: paidBy,
+              participants: participants,
             );
           },
       streamGroupById: (id) => groupService.streamGroupById(id),

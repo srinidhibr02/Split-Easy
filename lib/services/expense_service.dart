@@ -9,34 +9,6 @@ class ExpenseService {
   final AuthServices _auth = AuthServices();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GroupService groupService = GroupService();
-  final FriendsBalanceService _friendsBalanceService = FriendsBalanceService();
-
-  Future<void> _updateAllMemberBalances(String groupId) async {
-    try {
-      // Get group data
-      final groupDoc = await _firestore.collection('groups').doc(groupId).get();
-      if (!groupDoc.exists) return;
-
-      final groupData = groupDoc.data()!;
-      final members = List<Map<String, dynamic>>.from(
-        groupData['members'] ?? [],
-      );
-
-      print('🔄 Updating balances for ${members.length} members...');
-
-      // For each member, get their groups and recalculate friend balances
-      for (var member in members) {
-        final memberPhone = member['phoneNumber'] as String;
-
-        // Get all groups this member is part of
-        final memberGroups = await groupService.getMemberGroups(memberPhone);
-
-        print('✅ Updated balances for $memberPhone');
-      }
-    } catch (e) {
-      print('❌ Error updating member balances: $e');
-    }
-  }
 
   Future<void> addExpenseWithActivity({
     required String groupId,
@@ -95,13 +67,22 @@ class ExpenseService {
         transaction.set(expenseRef, expenseData);
         transaction.update(groupRef, {'members': updatedMembers});
       });
+
       await Future.delayed(const Duration(milliseconds: 500));
 
       await SettlementService().updateSuggestedSettlements(groupId);
 
       await Future.delayed(const Duration(milliseconds: 500));
 
-      await ActivityService().expenseAddedActivity(
+      FriendsBalanceService().onExpenseAdded(
+        groupId: groupId,
+        paidBy: paidBy,
+        participants: participants,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      ActivityService().expenseAddedActivity(
         groupId: groupId,
         groupName: names['groupName']!,
         expenseId: expenseId ?? 'unknown',
@@ -204,8 +185,17 @@ class ExpenseService {
       await Future.delayed(const Duration(milliseconds: 500));
 
       // Background tasks
-      await SettlementService().updateSuggestedSettlements(groupId);
+      SettlementService().updateSuggestedSettlements(groupId);
+
       await Future.delayed(const Duration(milliseconds: 500));
+
+      FriendsBalanceService().onExpenseEdited(
+        groupId: groupId,
+        oldPaidBy: oldPaidBy,
+        oldParticipants: oldParticipants,
+        newPaidBy: paidBy,
+        newParticipants: participants,
+      );
 
       await ActivityService().expenseEditedActivity(
         groupId: groupId,
@@ -254,7 +244,7 @@ class ExpenseService {
         List<dynamic> members = groupSnapshot.get('members') ?? [];
         Map<String, double> balanceChanges = {};
 
-        // Reverse balance changes
+        // Reverse balance changes (subtract what was paid, add back what was owed)
         paidBy.forEach((phoneNumber, amountPaid) {
           balanceChanges[phoneNumber] =
               (balanceChanges[phoneNumber] ?? 0) - amountPaid;
@@ -278,32 +268,40 @@ class ExpenseService {
           return memberMap;
         }).toList();
 
+        // Delete expense and update members in transaction
         DocumentReference expenseRef = groupRef
             .collection('expenses')
             .doc(expenseId);
         transaction.delete(expenseRef);
         transaction.update(groupRef, {'members': updatedMembers});
       });
+
+      // Wait for Firestore propagation
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // Background tasks
-      await SettlementService().updateSuggestedSettlements(groupId);
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Background tasks after transaction completes
+      SettlementService().updateSuggestedSettlements(groupId);
 
-      await _updateAllMemberBalances(groupId);
+      await FriendsBalanceService().onExpenseDeleted(
+        groupId: groupId,
+        paidBy: paidBy,
+        participants: participants,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 500));
 
       await ActivityService().expenseDeletedActivity(
         groupId: groupId,
-        groupName: names['groupName']!,
+        groupName: names["groupName"] as String,
         expenseTitle: expenseTitle,
         amount: amount,
         deletedByPhone: currentUserPhone,
-        deletedByName: names['userName']!,
+        deletedByName: names["userName"] as String,
       );
 
-      print('Expense deleted successfully');
+      print('✅ Expense deleted successfully');
     } catch (e) {
-      print('Error: $e');
+      print('❌ Error deleting expense: $e');
       rethrow;
     }
   }

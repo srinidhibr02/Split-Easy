@@ -1,6 +1,63 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:split_easy/constants.dart';
 
+// Parent widget: Pass user's phone number
+class FriendsBalancePage extends StatelessWidget {
+  final String userPhoneNumber;
+  const FriendsBalancePage({super.key, required this.userPhoneNumber});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Friends Overview")),
+      body: FriendsBalanceStreamWidget(userPhoneNumber: userPhoneNumber),
+    );
+  }
+}
+
+// Streams Firestore friend balances for a user and displays them
+class FriendsBalanceStreamWidget extends StatelessWidget {
+  final String userPhoneNumber;
+  const FriendsBalanceStreamWidget({super.key, required this.userPhoneNumber});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(userPhoneNumber)
+          .collection('friends')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return const Center(child: Text('Error loading friends.'));
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('No friends found.'));
+        }
+
+        final friends = snapshot.data!.docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return {
+            'name': data['name'] ?? '',
+            'avatar': data['avatar'] ?? '',
+            'balance': (data['balance'] is num)
+                ? (data['balance'] as num).toDouble()
+                : 0.0,
+          };
+        }).toList();
+
+        return FriendsBalanceWidget(friends: friends);
+      },
+    );
+  }
+}
+
+// Your original widget unchanged
 class FriendsBalanceWidget extends StatelessWidget {
   final List<Map<String, dynamic>> friends;
 
@@ -16,15 +73,15 @@ class FriendsBalanceWidget extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min, // 👈 prevents infinite height
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Header Row (Compact)
+          // Header Row
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: primary.withAlpha((255 * 0.3).round()),
+                  color: primary,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Icon(Icons.people, color: Colors.white, size: 18),
@@ -33,8 +90,8 @@ class FriendsBalanceWidget extends StatelessWidget {
               const Text(
                 "Friends Overview",
                 style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                   color: primary,
                 ),
               ),
@@ -45,7 +102,7 @@ class FriendsBalanceWidget extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: primary.withAlpha((255 * 0.25).round()),
+                  color: primary,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -98,28 +155,21 @@ class FriendsBalanceWidget extends StatelessWidget {
                       vertical: 10,
                     ),
                     child: Column(
-                      mainAxisSize: MainAxisSize.min, // 👈 added fix
+                      mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         CircleAvatar(
                           radius: 15,
                           backgroundColor: Colors.white,
-                          backgroundImage: avatar != null && avatar.isNotEmpty
+                          backgroundImage:
+                              (avatar != null &&
+                                  avatar.isNotEmpty &&
+                                  avatar != "default_avatar")
                               ? NetworkImage(avatar)
-                              : null,
-                          child: avatar == null || avatar.isEmpty
-                              ? Text(
-                                  name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: balance > 0
-                                        ? Colors.green.shade700
-                                        : Colors.red.shade700,
-                                  ),
-                                )
-                              : null,
+                              : const AssetImage('images/default_avatar.png')
+                                    as ImageProvider,
                         ),
+
                         const SizedBox(height: 6),
                         Text(
                           name,

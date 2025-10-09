@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:split_easy/constants.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 void showAddMemberDialog(
   BuildContext context, {
   required String groupId,
-  required Function(String phoneNumber) onAddMember,
+  required Function(String phoneNumber, {String? customName}) onAddMember,
 }) {
   showDialog(
     context: context,
@@ -15,7 +16,7 @@ void showAddMemberDialog(
 
 class AddMemberDialog extends StatefulWidget {
   final String groupId;
-  final Function(String phoneNumber) onAddMember;
+  final Function(String phoneNumber, {String? customName}) onAddMember;
 
   const AddMemberDialog({
     super.key,
@@ -29,9 +30,14 @@ class AddMemberDialog extends StatefulWidget {
 
 class _AddMemberDialogState extends State<AddMemberDialog>
     with SingleTickerProviderStateMixin {
-  final TextEditingController _controller = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
   bool _isLoading = false;
+  bool _isCheckingUser = false;
+  bool _userExists = true;
+  bool _showNameField = false;
   String? _errorText;
+  String? _nameErrorText;
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
 
@@ -47,20 +53,43 @@ class _AddMemberDialogState extends State<AddMemberDialog>
       curve: Curves.easeOutBack,
     );
     _animationController.forward();
-
-    _controller.addListener(_onPhoneNumberChanged);
+    _phoneController.addListener(_onPhoneNumberChanged);
   }
 
   void _onPhoneNumberChanged() {
-    setState(() {
-      if (_errorText != null && _controller.text.length == 10) {
-        _errorText = null;
-      }
-    });
+    if (_phoneController.text.length == 10) {
+      _checkUserExists();
+    } else {
+      setState(() {
+        _userExists = true;
+        _showNameField = false;
+        if (_errorText != null) _errorText = null;
+      });
+    }
   }
 
-  bool _validatePhoneNumber() {
-    final phone = _controller.text.trim();
+  Future<void> _checkUserExists() async {
+    setState(() => _isCheckingUser = true);
+
+    try {
+      final phoneNumber = '+91${_phoneController.text.trim()}';
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(phoneNumber)
+          .get();
+
+      setState(() {
+        _userExists = userDoc.exists;
+        _showNameField = !userDoc.exists;
+        _isCheckingUser = false;
+      });
+    } catch (e) {
+      setState(() => _isCheckingUser = false);
+    }
+  }
+
+  bool _validateInputs() {
+    final phone = _phoneController.text.trim();
 
     if (phone.isEmpty) {
       setState(() => _errorText = "Phone number is required");
@@ -77,31 +106,58 @@ class _AddMemberDialogState extends State<AddMemberDialog>
       return false;
     }
 
+    if (_showNameField) {
+      final name = _nameController.text.trim();
+      if (name.isEmpty) {
+        setState(
+          () => _nameErrorText = "Name is required for unregistered users",
+        );
+        return false;
+      }
+      if (name.length < 2) {
+        setState(() => _nameErrorText = "Name must be at least 2 characters");
+        return false;
+      }
+    }
+
     return true;
   }
 
   Future<void> _handleAddMember() async {
-    if (!_validatePhoneNumber()) return;
+    if (!_validateInputs()) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorText = null;
+    });
 
     try {
-      final phoneNumber = '+91${_controller.text.trim()}';
-      await widget.onAddMember(phoneNumber);
+      final phoneNumber = '+91${_phoneController.text.trim()}';
+      final customName = _showNameField ? _nameController.text.trim() : null;
+
+      await widget.onAddMember(phoneNumber, customName: customName);
 
       if (!mounted) return;
 
+      setState(() {
+        _isLoading = false;
+        _errorText = null;
+      });
+
       Navigator.pop(context);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
               const Icon(Icons.check_circle, color: Colors.white),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  "Member added successfully!",
-                  style: TextStyle(fontWeight: FontWeight.w500),
+                  _userExists
+                      ? "Member added successfully!"
+                      : "Unregistered user added successfully!",
+                  style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
               ),
             ],
@@ -115,40 +171,21 @@ class _AddMemberDialogState extends State<AddMemberDialog>
       );
     } catch (e) {
       if (!mounted) return;
+
+      // Extract the error message
+      final errorMessage = e.toString();
+
       setState(() {
         _isLoading = false;
-        _errorText = "Failed to add member. Please try again.";
+        _errorText = errorMessage;
       });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.white),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  e.toString().contains("exists")
-                      ? "Member already in group"
-                      : "Failed to add member",
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _phoneController.dispose();
+    _nameController.dispose();
     _animationController.dispose();
     super.dispose();
   }
@@ -168,7 +205,6 @@ class _AddMemberDialogState extends State<AddMemberDialog>
               // Header
               Container(
                 padding: const EdgeInsets.all(24),
-
                 child: Row(
                   children: [
                     Container(
@@ -231,7 +267,6 @@ class _AddMemberDialogState extends State<AddMemberDialog>
                       ),
                       child: Row(
                         children: [
-                          // Country Code
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
@@ -262,10 +297,9 @@ class _AddMemberDialogState extends State<AddMemberDialog>
                               ],
                             ),
                           ),
-                          // Phone Input
                           Expanded(
                             child: TextField(
-                              controller: _controller,
+                              controller: _phoneController,
                               keyboardType: TextInputType.phone,
                               maxLength: 10,
                               autofocus: true,
@@ -290,7 +324,19 @@ class _AddMemberDialogState extends State<AddMemberDialog>
                                   horizontal: 16,
                                   vertical: 16,
                                 ),
-                                suffixIcon: _controller.text.length == 10
+                                suffixIcon: _isCheckingUser
+                                    ? Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: primary,
+                                          ),
+                                        ),
+                                      )
+                                    : _phoneController.text.length == 10
                                     ? Icon(
                                         Icons.check_circle,
                                         color: Colors.green[600],
@@ -303,23 +349,70 @@ class _AddMemberDialogState extends State<AddMemberDialog>
                       ),
                     ),
 
-                    // Character Count
+                    // Character Count & User Status
                     Padding(
                       padding: const EdgeInsets.only(top: 8, left: 4),
                       child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            "${_controller.text.length}/10 digits",
+                            "${_phoneController.text.length}/10 digits",
                             style: TextStyle(
                               fontSize: 12,
-                              color: _controller.text.length == 10
+                              color: _phoneController.text.length == 10
                                   ? Colors.green[700]
                                   : Colors.grey[600],
-                              fontWeight: _controller.text.length == 10
+                              fontWeight: _phoneController.text.length == 10
                                   ? FontWeight.w600
                                   : FontWeight.normal,
                             ),
                           ),
+                          if (_phoneController.text.length == 10 &&
+                              !_isCheckingUser)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _userExists
+                                    ? Colors.green[50]
+                                    : Colors.orange[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: _userExists
+                                      ? Colors.green[200]!
+                                      : Colors.orange[200]!,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _userExists
+                                        ? Icons.verified_user
+                                        : Icons.person_outline,
+                                    size: 14,
+                                    color: _userExists
+                                        ? Colors.green[700]
+                                        : Colors.orange[700],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _userExists
+                                        ? "Registered"
+                                        : "Not Registered",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: _userExists
+                                          ? Colors.green[700]
+                                          : Colors.orange[700],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -360,7 +453,100 @@ class _AddMemberDialogState extends State<AddMemberDialog>
                       ),
                     ],
 
-                    const SizedBox(height: 8),
+                    // Name Field for Unregistered Users
+                    if (_showNameField) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange[50],
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange[200]!),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 18,
+                              color: Colors.orange[700],
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "User not registered. Please provide a name.",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange[900],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _nameController,
+                        enabled: !_isLoading,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: InputDecoration(
+                          labelText: "Member Name",
+                          hintText: "Enter member's name",
+                          prefixIcon: Icon(
+                            Icons.person,
+                            color: Colors.grey[600],
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: _nameErrorText != null
+                                  ? Colors.red[300]!
+                                  : Colors.grey[300]!,
+                              width: 1.5,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: primary, width: 2),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          if (_nameErrorText != null && value.length >= 2) {
+                            setState(() => _nameErrorText = null);
+                          }
+                        },
+                      ),
+                      if (_nameErrorText != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8, left: 4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.error_outline,
+                                size: 14,
+                                color: Colors.red[700],
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _nameErrorText!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.red[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+
+                    const SizedBox(height: 12),
 
                     // Info Box
                     Container(
@@ -380,7 +566,9 @@ class _AddMemberDialogState extends State<AddMemberDialog>
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              "Member will be notified via SMS",
+                              _userExists
+                                  ? "Member will be notified via SMS"
+                                  : "User can register later to see expenses",
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.blue[700],
@@ -444,18 +632,20 @@ class _AddMemberDialogState extends State<AddMemberDialog>
                                   ),
                                 ),
                               )
-                            : const Row(
+                            : Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(
+                                  const Icon(
                                     Icons.person_add,
                                     size: 18,
                                     color: Colors.white,
                                   ),
-                                  SizedBox(width: 8),
+                                  const SizedBox(width: 8),
                                   Text(
-                                    "Add Member",
-                                    style: TextStyle(
+                                    _showNameField
+                                        ? "Add Anyway"
+                                        : "Add Member",
+                                    style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.white,

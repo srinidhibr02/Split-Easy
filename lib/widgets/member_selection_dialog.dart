@@ -14,87 +14,136 @@ class MemberSelectionDialog extends StatefulWidget {
   });
 
   @override
-  _MemberSelectionDialogState createState() => _MemberSelectionDialogState();
+  State<MemberSelectionDialog> createState() => _MemberSelectionDialogState();
 }
 
 class _MemberSelectionDialogState extends State<MemberSelectionDialog> {
   late Map<String, double> selectedMembers;
   bool equalSplit = true;
-  Map<String, TextEditingController> controllers = {};
+  bool selectAll = false;
+  final Map<String, TextEditingController> controllers = {};
 
   @override
   void initState() {
     super.initState();
-    // Initialize with the passed initial selected members
     selectedMembers = Map.from(widget.initialSelected);
-
-    // Initialize controllers for each selected member
     for (var entry in selectedMembers.entries) {
       controllers[entry.key] = TextEditingController(
         text: entry.value.toStringAsFixed(2),
       );
     }
+    if (selectedMembers.length == widget.members.length &&
+        widget.members.isNotEmpty) {
+      selectAll = true;
+    }
+    if (equalSplit && selectedMembers.isNotEmpty) {
+      _updateEqualSplit();
+    }
   }
 
   @override
   void dispose() {
-    // Dispose all controllers
-    for (var controller in controllers.values) {
-      controller.dispose();
+    for (var c in controllers.values) {
+      c.dispose();
     }
     super.dispose();
   }
 
+  void toggleSelectAll(bool? checked) {
+    setState(() {
+      selectAll = checked ?? false;
+      if (selectAll) {
+        for (var m in widget.members) {
+          final phone = m["phoneNumber"] as String;
+          selectedMembers[phone] = 0.0;
+          controllers.putIfAbsent(
+            phone,
+            () => TextEditingController(text: "0.00"),
+          );
+        }
+        _updateEqualSplit();
+      } else {
+        selectedMembers.clear();
+        controllers.values.forEach((c) => c.dispose());
+        controllers.clear();
+      }
+    });
+  }
+
   void _updateEqualSplit() {
     if (selectedMembers.isEmpty) return;
-
-    double equalAmount = widget.amount / selectedMembers.length;
+    final equalAmount = widget.amount / selectedMembers.length;
+    final keys = selectedMembers.keys.toList();
     setState(() {
-      for (var key in selectedMembers.keys) {
+      for (var key in keys) {
         selectedMembers[key] = equalAmount;
-        // Update controller text as well
-        if (controllers.containsKey(key)) {
-          controllers[key]?.text = equalAmount.toStringAsFixed(2);
-        }
+        controllers.putIfAbsent(
+          key,
+          () => TextEditingController(text: equalAmount.toStringAsFixed(2)),
+        );
+        controllers[key]?.text = equalAmount.toStringAsFixed(2);
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // Calculate total contributions
-    double totalContributions = selectedMembers.values.fold(
-      0,
-      (sum, val) => sum + val,
-    );
-    double difference = widget.amount - totalContributions;
+    final total = selectedMembers.values.fold<double>(0.0, (a, b) => a + b);
+    final difference = widget.amount - total;
 
-    return AlertDialog(
-      title: const Text("Select Members"),
-      content: SingleChildScrollView(
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40),
+      child: Container(
+        padding: const EdgeInsets.all(25),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.75,
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            // Display expense amount
+            // Header
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    "Select Members",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: primary,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.grey, size: 22),
+                  onPressed: () => Navigator.pop(context),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Expense Info Card
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.shade200),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.blue.shade100),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    "Expense Amount:",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    "Total Expense",
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                   ),
                   Text(
                     "₹${widget.amount.toStringAsFixed(2)}",
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 18,
+                      fontSize: 16,
                       color: primary,
                     ),
                   ),
@@ -103,10 +152,110 @@ class _MemberSelectionDialogState extends State<MemberSelectionDialog> {
             ),
             const SizedBox(height: 12),
 
-            // Display total and difference for unequal split
-            if (!equalSplit && selectedMembers.isNotEmpty) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
+            // Split Mode Toggle
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              padding: const EdgeInsets.all(3),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (!equalSplit) {
+                          setState(() {
+                            equalSplit = true;
+                            if (selectedMembers.isEmpty &&
+                                widget.members.isNotEmpty) {
+                              for (var m in widget.members) {
+                                final phone = m['phoneNumber'] as String;
+                                selectedMembers[phone] = 0.0;
+                                controllers.putIfAbsent(
+                                  phone,
+                                  () => TextEditingController(text: "0.00"),
+                                );
+                              }
+                              selectAll = true;
+                            }
+                            _updateEqualSplit();
+                          });
+                        }
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: equalSplit ? primary : Colors.transparent,
+                          borderRadius: BorderRadius.circular(22),
+                        ),
+                        child: Text(
+                          "Equal Split",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: equalSplit
+                                ? Colors.white
+                                : Colors.grey.shade700,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (equalSplit) {
+                          setState(() {
+                            equalSplit = false;
+                            for (var key in selectedMembers.keys) {
+                              controllers.putIfAbsent(
+                                key,
+                                () => TextEditingController(
+                                  text: selectedMembers[key]!.toStringAsFixed(
+                                    2,
+                                  ),
+                                ),
+                              );
+                            }
+                            selectAll = false;
+                          });
+                        }
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: !equalSplit ? primary : Colors.transparent,
+                          borderRadius: BorderRadius.circular(22),
+                        ),
+                        child: Text(
+                          "Custom Split",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: !equalSplit
+                                ? Colors.white
+                                : Colors.grey.shade700,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Summary for Custom Split
+            if (!equalSplit && selectedMembers.isNotEmpty)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                padding: const EdgeInsets.all(10),
+                margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
                   color: difference.abs() < 0.01
                       ? Colors.green.shade50
@@ -115,264 +264,348 @@ class _MemberSelectionDialogState extends State<MemberSelectionDialog> {
                   border: Border.all(
                     color: difference.abs() < 0.01
                         ? Colors.green.shade200
-                        : Colors.red.shade300,
-                    width: 2,
+                        : Colors.red.shade200,
                   ),
                 ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          "Total Entered:",
-                          style: TextStyle(fontSize: 14),
-                        ),
-                        Text(
-                          "₹${totalContributions.toStringAsFixed(2)}",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: difference.abs() < 0.01
-                                ? Colors.green.shade700
-                                : Colors.red.shade700,
-                          ),
-                        ),
-                      ],
+                    _infoRow(
+                      "Total Entered",
+                      "₹${total.toStringAsFixed(2)}",
+                      primary,
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          "Remaining:",
-                          style: TextStyle(fontSize: 14),
-                        ),
-                        Text(
-                          difference >= 0
-                              ? "₹${difference.toStringAsFixed(2)}"
-                              : "-₹${(-difference).toStringAsFixed(2)}",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: difference.abs() < 0.01
-                                ? Colors.green.shade700
-                                : Colors.red.shade700,
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 3),
+                    _infoRow(
+                      "Remaining",
+                      difference >= 0
+                          ? "₹${difference.toStringAsFixed(2)}"
+                          : "-₹${(-difference).toStringAsFixed(2)}",
+                      difference.abs() < 0.01
+                          ? Colors.green.shade800
+                          : Colors.red.shade700,
                     ),
-                    const SizedBox(height: 8),
-                    if (difference.abs() >= 0.01) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade100,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              color: Colors.red.shade700,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                difference > 0
-                                    ? "Add ₹${difference.toStringAsFixed(2)} more to match total"
-                                    : "Reduce by ₹${(-difference).toStringAsFixed(2)} to match total",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.red.shade900,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ] else ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade100,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.check_circle_outline,
-                              color: Colors.green.shade700,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
+                    const SizedBox(height: 6),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      child: difference.abs() < 0.01
+                          ? _messageBox(
                               "Perfect! Total matches expense amount",
-                              style: TextStyle(
-                                fontSize: 9,
-                                color: Colors.green.shade900,
-                                fontWeight: FontWeight.bold,
-                              ),
+                              icon: Icons.check_circle_outline,
+                              color: Colors.green.shade700,
+                              background: Colors.green.shade100,
+                            )
+                          : _messageBox(
+                              "Add ₹${difference.toStringAsFixed(2)} more to match total",
+                              icon: Icons.error_outline,
+                              color: Colors.red.shade700,
+                              background: Colors.red.shade100,
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
-            ],
 
-            SwitchListTile(
-              title: Text(equalSplit ? "Equal Split" : "Custom Split"),
-              subtitle: const Text("Distribution method"),
-              activeThumbColor: primary,
-              value: equalSplit,
-              onChanged: (v) {
-                setState(() {
-                  equalSplit = v;
-                  if (equalSplit && selectedMembers.isNotEmpty) {
-                    _updateEqualSplit();
-                  }
-                });
-              },
-            ),
-            const Divider(),
-            ...widget.members.map((m) {
-              final phone = m["phoneNumber"] as String;
-              final name = m["name"] as String;
-              final isSelected = selectedMembers.containsKey(phone);
+            // Show "Select All" only in Equal Split mode
+            if (equalSplit)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: CheckboxListTile(
+                  value: selectAll,
+                  onChanged: toggleSelectAll,
+                  title: const Text(
+                    "Select All Members",
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  activeColor: Colors.green,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 0,
+                  ),
+                  dense: true,
+                ),
+              ),
 
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CheckboxListTile(
-                    activeColor: primary,
-                    title: Row(
-                      children: [
-                        Expanded(
-                          child: Text(name, overflow: TextOverflow.ellipsis),
+            // Members List
+            Expanded(
+              child: Scrollbar(
+                thumbVisibility: true,
+                child: ListView.builder(
+                  itemCount: widget.members.length,
+                  itemBuilder: (context, index) {
+                    final m = widget.members[index];
+                    final phone = m["phoneNumber"];
+                    final name = m["name"];
+                    final isSelected = selectedMembers.containsKey(phone);
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? primary.withOpacity(0.04)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected
+                              ? primary.withOpacity(0.3)
+                              : Colors.grey.shade200,
+                          width: 1,
                         ),
-                        if (equalSplit && isSelected) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            '₹${selectedMembers[phone]?.toStringAsFixed(2) ?? '0.00'}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue,
+                      ),
+                      child: Column(
+                        children: [
+                          CheckboxListTile(
+                            value: isSelected,
+                            onChanged: (val) {
+                              setState(() {
+                                if (val == true) {
+                                  selectedMembers[phone] = 0.0;
+                                  controllers.putIfAbsent(
+                                    phone,
+                                    () => TextEditingController(text: "0.00"),
+                                  );
+                                  if (equalSplit) _updateEqualSplit();
+                                } else {
+                                  selectedMembers.remove(phone);
+                                  controllers.remove(phone)?.dispose();
+                                  if (equalSplit &&
+                                      selectedMembers.isNotEmpty) {
+                                    _updateEqualSplit();
+                                  }
+                                }
+                              });
+                            },
+                            activeColor: primary,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 2,
+                            ),
+                            dense: true,
+                            title: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: primary.withOpacity(0.1),
+                                  child: Text(
+                                    name[0].toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: primary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                                if (equalSplit && isSelected)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: primary.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      "₹${selectedMembers[phone]?.toStringAsFixed(2) ?? '0.00'}",
+                                      style: const TextStyle(
+                                        color: primary,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
+                          if (!equalSplit && isSelected)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(52, 0, 12, 10),
+                              child: TextField(
+                                controller: controllers[phone],
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                decoration: InputDecoration(
+                                  labelText: "Amount",
+                                  labelStyle: const TextStyle(fontSize: 13),
+                                  prefixText: "₹ ",
+                                  prefixStyle: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.grey.shade50,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  isDense: true,
+                                ),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                onChanged: (val) {
+                                  setState(() {
+                                    selectedMembers[phone] =
+                                        double.tryParse(val) ?? 0.0;
+                                  });
+                                },
+                              ),
+                            ),
                         ],
-                      ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+
+            // Buttons
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.grey.shade300),
+                      foregroundColor: Colors.black54,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
-                    value: isSelected,
-                    onChanged: (bool? checked) {
-                      setState(() {
-                        if (checked == true) {
-                          if (equalSplit) {
-                            selectedMembers[phone] = 0.0;
-                            _updateEqualSplit();
-                          } else {
-                            selectedMembers[phone] = 0.0;
-                          }
-                        } else {
-                          selectedMembers.remove(phone);
-                          if (equalSplit && selectedMembers.isNotEmpty) {
-                            _updateEqualSplit();
-                          }
-                        }
-                      });
-                    },
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text(
+                      "Cancel",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
                   ),
-                  if (!equalSplit && isSelected) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(
-                        left: 56,
-                        right: 16,
-                        bottom: 12,
-                      ),
-                      child: TextField(
-                        decoration: const InputDecoration(
-                          labelText: "Amount",
-                          prefixText: "₹ ",
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        controller: controllers[phone],
-                        onChanged: (val) {
-                          double amount = double.tryParse(val) ?? 0.0;
-                          setState(() {
-                            selectedMembers[phone] = amount;
-                          });
-                        },
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primary,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                  ],
-                ],
-              );
-            }),
+                    onPressed: _onSavePressed,
+                    child: const Text(
+                      "Save",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text("Cancel", style: TextStyle(color: primary)),
+    );
+  }
+
+  void _onSavePressed() {
+    if (selectedMembers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select at least one member'),
+          backgroundColor: Colors.red,
         ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primary,
-            foregroundColor: Colors.white,
+      );
+      return;
+    }
+    if (!equalSplit) {
+      double total = selectedMembers.values.fold(0.0, (a, b) => a + b);
+      if ((total - widget.amount).abs() > 0.01) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Total must equal ₹${widget.amount.toStringAsFixed(2)} (Current: ₹${total.toStringAsFixed(2)})',
+            ),
+            backgroundColor: Colors.red,
           ),
-          onPressed: () {
-            // Validate before returning
-            if (selectedMembers.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please select at least one member'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-              return;
-            }
+        );
+        return;
+      }
+    }
+    Navigator.pop(context, selectedMembers);
+  }
 
-            // Check if total matches amount in custom split mode
-            if (!equalSplit) {
-              double total = selectedMembers.values.fold(
-                0,
-                (sum, val) => sum + val,
-              );
-              if ((total - widget.amount).abs() > 0.01) {
-                // Don't allow saving if amounts don't match
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Total must equal ₹${widget.amount.toStringAsFixed(2)}. Currently: ₹${total.toStringAsFixed(2)}',
-                    ),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-            }
-
-            Navigator.pop(context, selectedMembers);
-          },
-          child: const Text("Save", style: TextStyle(color: Colors.white)),
+  Widget _infoRow(String label, String value, Color color) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 13)),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _messageBox(
+    String message, {
+    required IconData icon,
+    required Color color,
+    required Color background,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

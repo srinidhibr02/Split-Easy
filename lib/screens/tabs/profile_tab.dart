@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:split_easy/constants.dart';
 import 'package:split_easy/screens/about_screen.dart';
+import 'package:split_easy/screens/info/buy_me_coffee.dart';
+import 'package:split_easy/screens/info/contact_us.dart';
+import 'package:split_easy/screens/info/terms_and_conditions.dart';
 import 'package:split_easy/services/auth_services.dart';
 import 'package:split_easy/services/firestore_services.dart';
 
@@ -341,10 +344,16 @@ class _ProfileTabState extends State<ProfileTab>
                               _buildSettingsTile(
                                 icon: Icons.payment_outlined,
                                 iconColor: Colors.blue,
-                                title: "Payment Methods",
+                                title: "Buy us a coffee",
                                 subtitle: "Manage payment options",
                                 onTap: () {
-                                  // TODO: Navigate to payment methods
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const SupportUsScreen(),
+                                    ),
+                                  );
                                 },
                                 showDivider: true,
                               ),
@@ -356,7 +365,13 @@ class _ProfileTabState extends State<ProfileTab>
                                 title: "Help & Support",
                                 subtitle: "FAQ and customer support",
                                 onTap: () {
-                                  // TODO: Navigate to FAQ/Help
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const ContactUsScreen(),
+                                    ),
+                                  );
                                 },
                                 showDivider: false,
                               ),
@@ -416,7 +431,13 @@ class _ProfileTabState extends State<ProfileTab>
                                 title: "Terms & Conditions",
                                 subtitle: "Read our terms of service",
                                 onTap: () {
-                                  // TODO: Navigate to terms
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const TermsAndConditionsScreen(),
+                                    ),
+                                  );
                                 },
                                 showDivider: false,
                               ),
