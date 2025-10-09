@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:split_easy/services/activity_service.dart';
 import 'package:split_easy/services/auth_services.dart';
+import 'package:split_easy/services/friend_balance_service.dart';
 import 'package:split_easy/services/group_services.dart';
 import 'package:split_easy/services/settlement_service.dart';
 
@@ -66,13 +67,22 @@ class ExpenseService {
         transaction.set(expenseRef, expenseData);
         transaction.update(groupRef, {'members': updatedMembers});
       });
+
       await Future.delayed(const Duration(milliseconds: 500));
 
       await SettlementService().updateSuggestedSettlements(groupId);
 
       await Future.delayed(const Duration(milliseconds: 500));
 
-      await ActivityService().expenseAddedActivity(
+      FriendsBalanceService().onExpenseAdded(
+        groupId: groupId,
+        paidBy: paidBy,
+        participants: participants,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      ActivityService().expenseAddedActivity(
         groupId: groupId,
         groupName: names['groupName']!,
         expenseId: expenseId ?? 'unknown',
@@ -175,8 +185,17 @@ class ExpenseService {
       await Future.delayed(const Duration(milliseconds: 500));
 
       // Background tasks
-      await SettlementService().updateSuggestedSettlements(groupId);
+      SettlementService().updateSuggestedSettlements(groupId);
+
       await Future.delayed(const Duration(milliseconds: 500));
+
+      FriendsBalanceService().onExpenseEdited(
+        groupId: groupId,
+        oldPaidBy: oldPaidBy,
+        oldParticipants: oldParticipants,
+        newPaidBy: paidBy,
+        newParticipants: participants,
+      );
 
       await ActivityService().expenseEditedActivity(
         groupId: groupId,
@@ -261,7 +280,13 @@ class ExpenseService {
       await Future.delayed(const Duration(milliseconds: 500));
 
       // Background tasks after transaction completes
-      await SettlementService().updateSuggestedSettlements(groupId);
+      SettlementService().updateSuggestedSettlements(groupId);
+
+      await FriendsBalanceService().onExpenseDeleted(
+        groupId: groupId,
+        paidBy: paidBy,
+        participants: participants,
+      );
 
       await Future.delayed(const Duration(milliseconds: 500));
 

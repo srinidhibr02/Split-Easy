@@ -48,18 +48,6 @@ class _HomeTabState extends State<HomeTab> {
 
           final groups = groupsSnapshot.data ?? [];
 
-          if (groups.isNotEmpty &&
-              userPhone.isNotEmpty &&
-              !hasInitializedBalances) {
-            hasInitializedBalances = true;
-            Future.microtask(() {
-              _friendsBalanceService.recalculateUserFriendBalances(
-                userPhone: userPhone,
-                groups: groups,
-              );
-            });
-          }
-
           if (groups.isEmpty) {
             return const Center(
               child: Column(

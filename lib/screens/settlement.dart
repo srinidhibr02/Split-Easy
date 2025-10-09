@@ -1382,7 +1382,7 @@ class _ModernSettleBottomSheetState extends State<ModernSettleBottomSheet> {
               const SizedBox(height: 12),
               TextButton(
                 onPressed: _isLoading ? null : () => Navigator.pop(context),
-                child: const Text("Cancel"),
+                child: const Text("Cancel", style: TextStyle(color: primary)),
               ),
             ],
           ),

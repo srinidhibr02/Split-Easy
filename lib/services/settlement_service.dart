@@ -6,71 +6,86 @@ import 'package:split_easy/services/settlement_calculator.dart';
 
 class SettlementService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FriendsBalanceService _friendsBalanceService = FriendsBalanceService();
 
+  /// Calculate settlements using SettlementCalculator
+  /// This method now just delegates to SettlementCalculator for consistency
   static List<Settlement> calculateSettlements(Map<String, dynamic> group) {
-    final members =
-        (group["members"] as List<dynamic>?)
-            ?.map((e) => e as Map<String, dynamic>)
-            .toList() ??
-        [];
-
-    List<Map<String, dynamic>> debtors = [];
-    List<Map<String, dynamic>> creditors = [];
-
-    for (var member in members) {
-      final balance = (member["balance"] ?? 0.0).toDouble();
-      final memberData = {
-        "phoneNumber": member["phoneNumber"],
-        "name": member["name"],
-        "balance": balance.abs(),
-      };
-      if (balance < -0.01) {
-        debtors.add(memberData);
-      } else if (balance > 0.01) {
-        creditors.add(memberData);
-      }
-    }
-
-    debtors.sort(
-      (a, b) => (b["balance"] as double).compareTo(a["balance"] as double),
-    );
-    creditors.sort(
-      (a, b) => (b["balance"] as double).compareTo(a["balance"] as double),
-    );
-
-    List<Settlement> settlements = [];
-    int i = 0, j = 0;
-
-    while (i < debtors.length && j < creditors.length) {
-      final debtor = debtors[i];
-      final creditor = creditors[j];
-
-      final debtAmount = debtor["balance"] as double;
-      final creditAmount = creditor["balance"] as double;
-      final settleAmount = debtAmount < creditAmount
-          ? debtAmount
-          : creditAmount;
-
-      settlements.add(
-        Settlement(
-          fromPhone: debtor["phoneNumber"],
-          fromName: debtor["name"],
-          toPhone: creditor["phoneNumber"],
-          toName: creditor["name"],
-          amount: settleAmount,
-        ),
-      );
-
-      debtor["balance"] = debtAmount - settleAmount;
-      creditor["balance"] = creditAmount - settleAmount;
-
-      if (debtor["balance"] < 0.01) i++;
-      if (creditor["balance"] < 0.01) j++;
-    }
-    return settlements;
+    return SettlementCalculator.calculateSettlements(group);
   }
 
+  /// Validate settlement before recording
+  void _validateSettlement({
+    required String fromPhone,
+    required String toPhone,
+    required double amount,
+    required Map<String, dynamic> groupData,
+  }) {
+    // Validate amount
+    if (amount <= 0) {
+      throw ArgumentError('Settlement amount must be positive');
+    }
+
+    // Validate not settling with yourself
+    if (fromPhone == toPhone) {
+      throw ArgumentError('Cannot settle with yourself');
+    }
+
+    // Validate members exist in group
+    final members = List<Map<String, dynamic>>.from(
+      groupData['members'] as List<dynamic>,
+    );
+    final memberPhones = members
+        .map((m) => m['phoneNumber'] as String)
+        .toList();
+
+    if (!memberPhones.contains(fromPhone)) {
+      throw ArgumentError('Payer ($fromPhone) not found in group');
+    }
+
+    if (!memberPhones.contains(toPhone)) {
+      throw ArgumentError('Recipient ($toPhone) not found in group');
+    }
+  }
+
+  /// Check for duplicate settlements to prevent double recording
+  Future<bool> _isDuplicateSettlement({
+    required String groupId,
+    required String fromPhone,
+    required String toPhone,
+    required double amount,
+  }) async {
+    try {
+      final recentSettlements = await _firestore
+          .collection('groups')
+          .doc(groupId)
+          .collection('settlements')
+          .where('fromPhone', isEqualTo: fromPhone)
+          .where('toPhone', isEqualTo: toPhone)
+          .where('amount', isEqualTo: amount)
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+
+      if (recentSettlements.docs.isNotEmpty) {
+        final lastSettlement = recentSettlements.docs.first;
+        final timestamp = lastSettlement.data()['timestamp'] as Timestamp?;
+        if (timestamp != null) {
+          final diff = DateTime.now().difference(timestamp.toDate());
+          // If same settlement was recorded within last 5 seconds, consider it duplicate
+          if (diff.inSeconds < 5) {
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (e) {
+      // If we can't check for duplicates, err on the side of caution and proceed
+      print('Warning: Could not check for duplicate settlements: $e');
+      return false;
+    }
+  }
+
+  /// Record a settlement between two members
   Future<void> recordSettlement({
     required String groupId,
     required String fromPhone,
@@ -80,9 +95,42 @@ class SettlementService {
     required String toName,
   }) async {
     try {
+      print(
+        '📝 Recording settlement: $fromName → $toName: ₹${amount.toStringAsFixed(2)}',
+      );
+
       final groupRef = _firestore.collection('groups').doc(groupId);
 
-      // Step 1: Update group member balances and add settlement document
+      // Pre-fetch group data for validation
+      final groupSnapshot = await groupRef.get();
+      if (!groupSnapshot.exists) {
+        throw Exception('Group not found');
+      }
+
+      final groupData = groupSnapshot.data() as Map<String, dynamic>;
+
+      // Validate settlement
+      _validateSettlement(
+        fromPhone: fromPhone,
+        toPhone: toPhone,
+        amount: amount,
+        groupData: groupData,
+      );
+
+      // Check for duplicates
+      final isDuplicate = await _isDuplicateSettlement(
+        groupId: groupId,
+        fromPhone: fromPhone,
+        toPhone: toPhone,
+        amount: amount,
+      );
+
+      if (isDuplicate) {
+        print('⚠️ Duplicate settlement detected, skipping');
+        return;
+      }
+
+      // Step 1: Update group member balances and add settlement document in transaction
       await _firestore.runTransaction((transaction) async {
         final groupSnapshot = await transaction.get(groupRef);
 
@@ -104,10 +152,12 @@ class SettlementService {
 
           if (phoneNumber == fromPhone) {
             final currentBalance = (member['balance'] ?? 0.0) as num;
+            // When someone pays, their balance increases (they're owed less or owe more)
             members[i]['balance'] = currentBalance.toDouble() + amount;
             fromFound = true;
           } else if (phoneNumber == toPhone) {
             final currentBalance = (member['balance'] ?? 0.0) as num;
+            // When someone receives, their balance decreases (they owe less or are owed more)
             members[i]['balance'] = currentBalance.toDouble() - amount;
             toFound = true;
           }
@@ -116,13 +166,15 @@ class SettlementService {
         }
 
         if (!fromFound || !toFound) {
-          throw Exception('One or both members not found');
+          throw Exception('One or both members not found in group');
         }
 
+        // Update group members
         transaction.update(groupRef, {'members': members});
 
-        final activityRef = groupRef.collection('settlements').doc();
-        transaction.set(activityRef, {
+        // Add settlement record
+        final settlementRef = groupRef.collection('settlements').doc();
+        transaction.set(settlementRef, {
           'type': 'settlement',
           'fromPhone': fromPhone,
           'fromName': fromName,
@@ -133,20 +185,29 @@ class SettlementService {
           'timestamp': FieldValue.serverTimestamp(),
           'createdAt': DateTime.now().toIso8601String(),
         });
+
+        print(
+          '✅ Transaction completed: balances updated and settlement recorded',
+        );
       });
 
-      // Add delay to ensure Firestore propagation
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      // Step 2: Update friend balances for ALL group members
-      await _updateAllMemberBalances(groupId);
-
-      // Step 3: Recalculate and store new suggested settlements
+      // Step 2: Update suggested settlements (WITH AWAIT)
+      print('🔄 Updating suggested settlements...');
       await updateSuggestedSettlements(groupId);
+      print('✅ Suggested settlements updated');
 
-      print('Settlement recorded and friend balances updated');
+      // Step 3: Update friend balances (WITH AWAIT)
+      print('🔄 Updating friend balances...');
+      await FriendsBalanceService().onSettlementRecorded(
+        groupId: groupId,
+        fromPhone: fromPhone,
+        toPhone: toPhone,
+      );
+      print('✅ Friend balances updated');
 
-      ActivityService().recordSettlementActivity(
+      // Step 4: Record activity
+      print('🔄 Recording activity...');
+      await ActivityService().recordSettlementActivity(
         groupId: groupId,
         fromPhone: fromPhone,
         toPhone: toPhone,
@@ -154,7 +215,11 @@ class SettlementService {
         fromName: fromName,
         toName: toName,
       );
+      print('✅ Activity recorded');
+
+      print('🎉 Settlement recorded successfully');
     } catch (e) {
+      print('❌ Failed to record settlement: $e');
       throw Exception('Failed to record settlement: $e');
     }
   }
@@ -162,22 +227,40 @@ class SettlementService {
   /// Update suggested settlements in Firestore with fresh data
   Future<void> updateSuggestedSettlements(String groupId) async {
     try {
-      // Use get() with source: Source.server to force fresh data from server
+      // Force fresh data from server
       final groupDoc = await _firestore
           .collection('groups')
           .doc(groupId)
           .get(const GetOptions(source: Source.server));
 
       if (!groupDoc.exists) {
-        print('Group not found: $groupId');
+        print('⚠️ Group not found: $groupId');
         return;
       }
 
       final groupData = groupDoc.data() as Map<String, dynamic>;
 
+      // Validate balances sum to zero (with tolerance for floating point errors)
+      final members = List<Map<String, dynamic>>.from(
+        groupData['members'] as List<dynamic>? ?? [],
+      );
+
+      double totalBalance = 0.0;
+      for (var member in members) {
+        totalBalance += (member['balance'] ?? 0.0) as num;
+      }
+
+      if (totalBalance.abs() > 0.01) {
+        print(
+          '⚠️ WARNING: Group $groupId balances do not sum to zero! Total: ${totalBalance.toStringAsFixed(2)}',
+        );
+        // Log for monitoring but continue - this might be a rounding issue
+      }
+
       // Calculate settlements with fresh data
       final suggestions = SettlementCalculator.calculateSettlements(groupData);
 
+      // Store the new suggestions
       await storeSuggestedSettlements(
         groupId: groupId,
         settlements: suggestions,
@@ -224,69 +307,71 @@ class SettlementService {
       }
 
       await batch.commit();
-      print('Stored ${settlements.length} suggested settlements');
+      print('✅ Stored ${settlements.length} suggested settlements');
     } catch (e) {
-      print('Error storing suggested settlements: $e');
+      print('❌ Error storing suggested settlements: $e');
       rethrow;
     }
   }
 
-  /// Update friend balances for all members in the group
-  Future<void> _updateAllMemberBalances(String groupId) async {
-    try {
-      // Force server fetch to get latest data
-      final groupDoc = await _firestore
-          .collection('groups')
-          .doc(groupId)
-          .get(const GetOptions(source: Source.server));
+  /// Retry operation with exponential backoff
+  Future<T> _retryOperation<T>(
+    Future<T> Function() operation, {
+    int maxRetries = 3,
+    Duration initialDelay = const Duration(milliseconds: 500),
+  }) async {
+    for (int i = 0; i < maxRetries; i++) {
+      try {
+        return await operation();
+      } catch (e) {
+        if (i == maxRetries - 1) {
+          rethrow; // Last attempt failed, throw the error
+        }
 
-      if (!groupDoc.exists) return;
-
-      final groupData = groupDoc.data()!;
-      final members = List<Map<String, dynamic>>.from(
-        groupData['members'] ?? [],
-      );
-
-      print('Updating friend balances for ${members.length} members...');
-
-      for (var member in members) {
-        final memberPhone = member['phoneNumber'] as String;
-
-        // Get all groups this member is part of
-        final memberGroups = await _getMemberGroups(memberPhone);
-
-        // Recalculate balances with all their friends
-        await _friendsBalanceService.recalculateUserFriendBalances(
-          userPhone: memberPhone,
-          groups: memberGroups,
+        final delay = initialDelay * (i + 1); // Exponential backoff
+        print(
+          '⚠️ Retry attempt ${i + 1}/$maxRetries after ${delay.inMilliseconds}ms',
         );
+        await Future.delayed(delay);
       }
-    } catch (e) {
-      print('Error updating member balances: $e');
     }
+    throw Exception('Max retries exceeded');
   }
 
-  /// Get all groups a member belongs to
-  Future<List<Map<String, dynamic>>> _getMemberGroups(
-    String memberPhone,
-  ) async {
-    try {
-      final allGroupsSnapshot = await _firestore.collection('groups').get();
+  /// Get settlement history for a group
+  Stream<List<Map<String, dynamic>>> streamSettlementHistory(String groupId) {
+    return _firestore
+        .collection('groups')
+        .doc(groupId)
+        .collection('settlements')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map((doc) {
+            final data = doc.data();
+            return {'id': doc.id, ...data};
+          }).toList();
+        });
+  }
 
-      final memberGroups = <Map<String, dynamic>>[];
-      for (var doc in allGroupsSnapshot.docs) {
-        final data = doc.data();
-        final members = List<dynamic>.from(data['members'] ?? []);
-
-        if (members.any((m) => m['phoneNumber'] == memberPhone)) {
-          memberGroups.add({'id': doc.id, ...data});
-        }
-      }
-
-      return memberGroups;
-    } catch (e) {
-      print('Error getting member groups: $e');
-      return [];
-    }
+  /// Get suggested settlements for a group
+  Stream<List<Settlement>> streamSuggestedSettlements(String groupId) {
+    return _firestore
+        .collection('groups')
+        .doc(groupId)
+        .collection('suggestedSettlements')
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map((doc) {
+            final data = doc.data();
+            return Settlement(
+              fromPhone: data['fromPhone'] as String,
+              fromName: data['fromName'] as String,
+              toPhone: data['toPhone'] as String,
+              toName: data['toName'] as String,
+              amount: (data['amount'] as num).toDouble(),
+            );
+          }).toList();
+        });
   }
 }
