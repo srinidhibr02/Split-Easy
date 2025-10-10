@@ -9,6 +9,7 @@ class ExpenseService {
   final AuthServices _auth = AuthServices();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GroupService groupService = GroupService();
+  final FriendsBalanceService friendsBalanceService = FriendsBalanceService();
 
   Future<void> addExpenseWithActivity({
     required String groupId,
@@ -93,9 +94,7 @@ class ExpenseService {
         paidBy: paidBy,
         participants: participants,
       );
-      print('Expense created successfully');
     } catch (e) {
-      print('Error adding expense: $e');
       rethrow;
     }
   }
@@ -206,10 +205,7 @@ class ExpenseService {
         editedByPhone: currentUserPhone,
         editedByName: names['userName']!,
       );
-
-      print('Expense edited successfully');
     } catch (e) {
-      print('Error: $e');
       rethrow;
     }
   }
@@ -298,10 +294,7 @@ class ExpenseService {
         deletedByPhone: currentUserPhone,
         deletedByName: names["userName"] as String,
       );
-
-      print('✅ Expense deleted successfully');
     } catch (e) {
-      print('❌ Error deleting expense: $e');
       rethrow;
     }
   }

@@ -491,6 +491,7 @@ class _AddMemberDialogState extends State<AddMemberDialog>
                         textCapitalization: TextCapitalization.words,
                         decoration: InputDecoration(
                           labelText: "Member Name",
+                          labelStyle: TextStyle(color: Colors.green),
                           hintText: "Enter member's name",
                           prefixIcon: Icon(
                             Icons.person,
@@ -513,7 +514,10 @@ class _AddMemberDialogState extends State<AddMemberDialog>
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: primary, width: 2),
+                            borderSide: BorderSide(
+                              color: Colors.green,
+                              width: 2,
+                            ),
                           ),
                         ),
                         onChanged: (value) {

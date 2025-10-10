@@ -41,7 +41,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [primary, primary.withOpacity(0.7)],
+                  colors: [primary, primary.withAlpha((255 * 0.7).round())],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -70,7 +70,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                   Text(
                     widget.group["purpose"] ?? "",
                     style: TextStyle(
-                      color: primary.withOpacity(0.7),
+                      color: primary..withAlpha((255 * 0.7).round()),
                       fontSize: 12,
                     ),
                   ),
@@ -114,14 +114,17 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                 ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Colors.white, Colors.white.withOpacity(0.9)],
+                    colors: [
+                      Colors.white,
+                      Colors.white..withAlpha((255 * 0.9).round()),
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
+                      color: Colors.grey..withAlpha((255 * 0.1).round()),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -286,9 +289,6 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                 }
 
                 final expenses = snapshot.data!.docs;
-                final members = (widget.group["members"] as List<dynamic>)
-                    .map((e) => e as Map<String, dynamic>)
-                    .toList();
 
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -306,7 +306,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.grey.withOpacity(0.08),
+                            color: Colors.grey..withAlpha((255 * 0.08).round()),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -320,7 +320,10 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                         leading: Container(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
-                              colors: [primary, primary.withOpacity(0.7)],
+                              colors: [
+                                primary,
+                                primary..withAlpha((255 * 0.7).round()),
+                              ],
                             ),
                             borderRadius: BorderRadius.circular(10),
                           ),
@@ -424,11 +427,11 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor: color.withOpacity(0.95),
+        backgroundColor: color..withAlpha((255 * 0.95).round()),
         elevation: 6,
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        shadowColor: color.withOpacity(0.4),
+        shadowColor: color..withAlpha((255 * 0.4).round()),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -466,7 +469,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [primary, primary.withOpacity(0.8)],
+                    colors: [primary, primary..withAlpha((255 * 0.8).round())],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -480,14 +483,10 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white..withAlpha((255 * 0.2).round()),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(
-                        Icons.group,
-                        color: Colors.white,
-                        size: 24,
-                      ),
+                      child: const Icon(Icons.group, color: primary, size: 24),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -658,7 +657,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withAlpha((255 * 0.05).round()),
                       blurRadius: 10,
                       offset: const Offset(0, -2),
                     ),
@@ -829,6 +828,7 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen> {
 
     if (hasSettlements) {
       final warn = await showDialog<bool>(
+        // ignore: use_build_context_synchronously
         context: context,
         builder: (ctx) => Dialog(
           shape: RoundedRectangleBorder(

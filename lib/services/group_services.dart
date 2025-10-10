@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:split_easy/services/activity_service.dart';
 import 'package:split_easy/services/friend_balance_service.dart';
-import 'package:split_easy/services/settlement_service.dart';
 
 class GroupService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -116,38 +115,54 @@ class GroupService {
     };
   }
 
-  Future<void> createGroupWithActivity({
+  Future<void> createGroup({
     required String groupName,
-    required List<Map<String, dynamic>> members,
+    required String purpose,
   }) async {
-    final currentUserPhone = _auth.currentUser?.phoneNumber ?? "";
+    final userDoc = _firestore.collection("users").doc(currentUserPhone);
 
-    final userDoc = await _firestore
-        .collection('users')
-        .doc(currentUserPhone)
-        .get();
-    final userName = userDoc.data()?['name'] ?? 'You';
+    // Get user data
+    final userSnapshot = await userDoc.get();
+    final userData = userSnapshot.exists ? userSnapshot.data()! : {};
+    final userName = userData["name"] ?? "Unknown";
+    final userAvatar = userData["avatar"] ?? "default_avatar_url";
 
-    try {
-      final groupRef = await _firestore.collection('groups').add({
-        'groupName': groupName,
-        'members': members,
-        'createdAt': FieldValue.serverTimestamp(),
-        'createdBy': currentUserPhone,
-      });
+    // Define initial members list
+    final members = [
+      {"phoneNumber": currentUserPhone, "name": userName, "avatar": userAvatar},
+    ];
 
-      await ActivityService().createGroupActivity(
-        groupId: groupRef.id,
-        groupName: groupName,
-        creatorPhone: currentUserPhone,
-        creatorName: userName,
-      );
+    // Extract only phone numbers for fast querying
+    final memberPhones = members
+        .map((m) => m["phoneNumber"] as String)
+        .toList();
 
-      print('Group created successfully');
-    } catch (e) {
-      print('Error: $e');
-      rethrow;
-    }
+    // Create a new group in the global 'groups' collection
+    final newGroupDoc = await _firestore.collection("groups").add({
+      "groupName": groupName,
+      "purpose": purpose,
+      "createdAt": FieldValue.serverTimestamp(),
+      "owner": {
+        "phoneNumber": currentUserPhone,
+        "name": userName,
+        "avatar": userAvatar,
+      },
+      "members": members,
+      "memberPhones": memberPhones, // <-- added for easier queries
+    });
+
+    final groupId = newGroupDoc.id;
+
+    // Add groupId to the owner's 'groups' array
+    await userDoc.update({
+      "groups": FieldValue.arrayUnion([groupId]),
+    });
+    ActivityService().createGroupActivity(
+      groupId: groupId,
+      groupName: groupName,
+      creatorPhone: currentUserPhone,
+      creatorName: userName,
+    );
   }
 
   Future<void> addMemberToGroup({
@@ -167,7 +182,7 @@ class GroupService {
     // Get group data
     final groupSnapshot = await groupDoc.get();
     if (!groupSnapshot.exists) {
-      return;
+      throw Exception("Group not found");
     }
     final groupData = groupSnapshot.data()!;
 
@@ -180,12 +195,12 @@ class GroupService {
     // Get or create new member document
     final newMemberSnapshot = await newMemberDoc.get();
     if (!newMemberSnapshot.exists) {
-      // Create a basic document for unregistered user before batching update
+      // Create a basic document for unregistered user
       await newMemberDoc.set({
         "phoneNumber": newMemberPhoneNumber,
         "name": customName ?? "Unknown",
         "avatar": "default_avatar",
-        "groups": [], // Initialize groups field to avoid update errors
+        "groups": [],
       }, SetOptions(merge: true));
     }
 
@@ -207,6 +222,7 @@ class GroupService {
       "phoneNumber": newMemberPhoneNumber,
       "name": newMemberData["name"],
       "avatar": newMemberData["avatar"] ?? "",
+      "balance": 0.0, // Initialize balance for new member
     };
 
     final batch = _firestore.batch();
@@ -223,29 +239,48 @@ class GroupService {
     });
 
     // 3️⃣ Add new member as a friend to all existing group members (bidirectional)
+    // CRITICAL FIX: Use SetOptions(merge: true) to preserve existing data
     final members = List<Map<String, dynamic>>.from(groupData["members"] ?? []);
 
     for (final member in members) {
       final memberPhone = member["phoneNumber"];
       final memberDoc = _firestore.collection("users").doc(memberPhone);
 
+      // Add new member to existing member's friends (MERGE to preserve balance)
       batch.set(
         memberDoc.collection("friends").doc(newMemberPhoneNumber),
-        newMemberInfo,
+        {
+          "phoneNumber": newMemberPhoneNumber,
+          "name": newMemberInfo["name"],
+          "avatar": newMemberInfo["avatar"],
+          // Note: Don't set balance here - it will be calculated later
+          // If balance field exists, merge will preserve it
+          "lastUpdated": FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true), // ✅ CRITICAL: Merge instead of overwrite
       );
 
-      batch.set(newMemberDoc.collection("friends").doc(memberPhone), {
-        "phoneNumber": member["phoneNumber"],
-        "name": member["name"],
-        "avatar": member["avatar"],
-      });
+      // Add existing member to new member's friends (MERGE to preserve balance)
+      batch.set(
+        newMemberDoc.collection("friends").doc(memberPhone),
+        {
+          "phoneNumber": member["phoneNumber"],
+          "name": member["name"],
+          "avatar": member["avatar"] ?? "",
+          // Note: Don't set balance here - it will be calculated later
+          "lastUpdated": FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true), // ✅ CRITICAL: Merge instead of overwrite
+      );
     }
 
     // Commit all updates
     await batch.commit();
 
+    print("✅ Member added to group successfully");
+
     // Member added activity logging
-    ActivityService().memberAddedActivity(
+    await ActivityService().memberAddedActivity(
       groupId: groupId,
       groupName: groupData["groupName"],
       addedByPhone: addedByMemberInfo["phoneNumber"],
@@ -253,6 +288,48 @@ class GroupService {
       newMemberPhone: newMemberPhoneNumber,
       newMemberName: newMemberData["name"],
     );
+
+    print("✅ Activity logged");
+
+    // OPTIONAL: Recalculate friend balances for the new member
+    // This ensures all friend balances are accurate after adding the member
+    try {
+      print("🔄 Recalculating friend balances for new member...");
+
+      // Get all groups that both new member and existing members are in
+      final newMemberGroupsSnapshot = await _firestore
+          .collection('groups')
+          .where('memberPhones', arrayContains: newMemberPhoneNumber)
+          .get();
+
+      final newMemberGroups = newMemberGroupsSnapshot.docs
+          .map((doc) => {'id': doc.id, ...doc.data()})
+          .toList();
+
+      // For each existing member in this group, recalculate balance with new member
+      for (final member in members) {
+        final memberPhone = member["phoneNumber"];
+
+        // Calculate balance between new member and this existing member
+        final balance = await FriendsBalanceService().calculateFriendBalance(
+          userPhone: newMemberPhoneNumber,
+          friendPhone: memberPhone,
+          groups: newMemberGroups,
+        );
+
+        // Update the balance (this will merge with existing friend data)
+        await FriendsBalanceService().updateFriendBalances(
+          fromPhone: newMemberPhoneNumber,
+          toPhone: memberPhone,
+          amount: balance,
+        );
+      }
+
+      print("✅ Friend balances recalculated");
+    } catch (e) {
+      print("⚠️ Warning: Could not recalculate friend balances: $e");
+      // Don't throw - member was added successfully, this is just a bonus
+    }
   }
 
   Future<void> removeMemberFromGroup({
@@ -387,7 +464,6 @@ class GroupService {
 
       return memberGroups;
     } catch (e) {
-      print('Error getting member groups: $e');
       return [];
     }
   }

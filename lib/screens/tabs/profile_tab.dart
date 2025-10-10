@@ -1,6 +1,8 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:split_easy/constants.dart';
 import 'package:split_easy/screens/about_screen.dart';
+import 'package:split_easy/screens/info/account_settings.dart';
 import 'package:split_easy/screens/info/buy_me_coffee.dart';
 import 'package:split_easy/screens/info/contact_us.dart';
 import 'package:split_easy/screens/info/terms_and_conditions.dart';
@@ -156,7 +158,7 @@ class _ProfileTabState extends State<ProfileTab>
           final data = snapshot.data!;
           final name = data["name"] ?? "No Name";
           final email = data["email"] ?? "";
-          final phone = data["phone"] ?? "";
+          final phone = data["phoneNumber"] ?? "";
           final avatarUrl = data["avatar"] ?? "";
 
           return FadeTransition(
@@ -318,8 +320,15 @@ class _ProfileTabState extends State<ProfileTab>
                                 title: "Account Settings",
                                 subtitle: "Manage your account information",
                                 onTap: () {
-                                  // TODO: Navigate to account settings
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          AccountDetailsScreen(),
+                                    ),
+                                  );
                                 },
+
                                 showDivider: true,
                               ),
 

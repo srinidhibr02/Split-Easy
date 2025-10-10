@@ -105,10 +105,12 @@ class _HomeTabState extends State<HomeTab> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: primary.withOpacity(0.15)),
+                      border: Border.all(
+                        color: primary.withAlpha((255 * 0.15).round()),
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
+                          color: Colors.black.withAlpha((255 * 0.03).round()),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
@@ -135,7 +137,7 @@ class _HomeTabState extends State<HomeTab> {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: primary.withOpacity(0.1),
+                                color: primary.withAlpha((255 * 0.1).round()),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
@@ -324,9 +326,9 @@ class _HomeTabState extends State<HomeTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withAlpha((255 * 0.08).round()),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.25)),
+        border: Border.all(color: color.withAlpha((255 * 0.25).round())),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -387,8 +389,8 @@ class _HomeTabState extends State<HomeTab> {
                 ),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? Colors.white.withOpacity(0.3)
-                      : primary.withOpacity(0.15),
+                      ? Colors.white.withAlpha((255 * 0.3).round())
+                      : primary.withAlpha((255 * 0.15).round()),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -452,7 +454,7 @@ class _HomeTabState extends State<HomeTab> {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: primary.withOpacity(0.1),
+                  color: primary.withAlpha((255 * 0.1).round()),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(Icons.group, color: primary, size: 24),
