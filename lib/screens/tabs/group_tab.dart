@@ -113,7 +113,7 @@ class _GroupTabState extends State<GroupTab> {
             return ListView.separated(
               padding: const EdgeInsets.only(bottom: 24),
               itemCount: groups.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 6),
+              separatorBuilder: (_, _) => const SizedBox(height: 6),
               itemBuilder: (context, idx) => _modernGroupCard(groups[idx]),
             );
           },
@@ -154,8 +154,9 @@ class _GroupTabState extends State<GroupTab> {
         if (diff.inDays == 0) return "Today";
         if (diff.inDays == 1) return "Yesterday";
         if (diff.inDays < 30) return "${diff.inDays} days ago";
-        if (diff.inDays < 365)
+        if (diff.inDays < 365) {
           return "${(diff.inDays / 30).floor()} months ago";
+        }
         return "${(diff.inDays / 365).floor()} years ago";
       } catch (e) {
         return "";
@@ -175,7 +176,7 @@ class _GroupTabState extends State<GroupTab> {
             borderRadius: BorderRadius.circular(22),
             boxShadow: [
               BoxShadow(
-                color: purposeColor.withOpacity(0.10),
+                color: purposeColor.withAlpha((255 * 0.1).round()),
                 blurRadius: 28,
                 spreadRadius: 1,
                 offset: const Offset(0, 6),
@@ -206,8 +207,8 @@ class _GroupTabState extends State<GroupTab> {
                         borderRadius: BorderRadius.circular(16),
                         gradient: LinearGradient(
                           colors: [
-                            purposeColor.withOpacity(0.96),
-                            purposeColor.withOpacity(0.67),
+                            purposeColor.withAlpha((255 * 0.96).round()),
+                            purposeColor.withAlpha((255 * 0.67).round()),
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
@@ -257,7 +258,7 @@ class _GroupTabState extends State<GroupTab> {
                               _chip(
                                 purpose,
                                 null,
-                                purposeColor.withOpacity(0.15),
+                                purposeColor.withAlpha((255 * 0.15).round()),
                                 purposeColor,
                               ),
                               const SizedBox(width: 7),

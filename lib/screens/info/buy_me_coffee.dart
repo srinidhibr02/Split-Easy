@@ -17,7 +17,7 @@ class SupportUsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       appBar: AppBar(
-        title: const Text('Support Us'),
+        title: const Text('Support us'),
         centerTitle: true,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
@@ -34,7 +34,7 @@ class SupportUsScreen extends StatelessWidget {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.orangeAccent.withOpacity(0.3),
+                    color: Colors.orangeAccent..withAlpha((255 * 0.3).round()),
                     blurRadius: 20,
                     spreadRadius: 5,
                   ),
@@ -50,7 +50,7 @@ class SupportUsScreen extends StatelessWidget {
 
             // Title
             Text(
-              "Buy Us a Coffee ☕",
+              "Buy us a Coffee ☕",
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: Colors.brown.shade700,
@@ -92,7 +92,8 @@ class SupportUsScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(30),
                 ),
                 elevation: 5,
-                shadowColor: Colors.orangeAccent.withOpacity(0.4),
+                shadowColor: Colors.orangeAccent
+                  ..withAlpha((255 * 0.4).round()),
               ),
             ),
 

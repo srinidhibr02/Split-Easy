@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:split_easy/constants.dart';
-import 'package:split_easy/services/firestore_services.dart';
+import 'package:split_easy/services/group_services.dart';
 
 class CreateGroupScreen extends StatefulWidget {
   const CreateGroupScreen({super.key});
@@ -11,7 +11,7 @@ class CreateGroupScreen extends StatefulWidget {
 
 class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final TextEditingController nameController = TextEditingController();
-  final FirestoreServices _firestoreServices = FirestoreServices();
+  final GroupService groupServices = GroupService();
 
   bool isLoading = false;
   String? selectedPurpose;
@@ -39,7 +39,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     });
 
     try {
-      await _firestoreServices.createGroup(
+      await groupServices.createGroup(
         groupName: groupName,
         purpose: selectedPurpose!,
       );

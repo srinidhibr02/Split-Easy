@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:split_easy/dataModels/dataModels.dart';
+import 'package:split_easy/dataModels/data_models.dart';
 import 'package:split_easy/services/activity_service.dart';
 import 'package:split_easy/services/friend_balance_service.dart';
 import 'package:split_easy/services/settlement_calculator.dart';
@@ -8,7 +8,6 @@ class SettlementService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   /// Calculate settlements using SettlementCalculator
-  /// This method now just delegates to SettlementCalculator for consistency
   static List<Settlement> calculateSettlements(Map<String, dynamic> group) {
     return SettlementCalculator.calculateSettlements(group);
   }
@@ -20,17 +19,14 @@ class SettlementService {
     required double amount,
     required Map<String, dynamic> groupData,
   }) {
-    // Validate amount
     if (amount <= 0) {
       throw ArgumentError('Settlement amount must be positive');
     }
 
-    // Validate not settling with yourself
     if (fromPhone == toPhone) {
       throw ArgumentError('Cannot settle with yourself');
     }
 
-    // Validate members exist in group
     final members = List<Map<String, dynamic>>.from(
       groupData['members'] as List<dynamic>,
     );
@@ -47,7 +43,7 @@ class SettlementService {
     }
   }
 
-  /// Check for duplicate settlements to prevent double recording
+  /// Check for duplicate settlements
   Future<bool> _isDuplicateSettlement({
     required String groupId,
     required String fromPhone,
@@ -71,7 +67,6 @@ class SettlementService {
         final timestamp = lastSettlement.data()['timestamp'] as Timestamp?;
         if (timestamp != null) {
           final diff = DateTime.now().difference(timestamp.toDate());
-          // If same settlement was recorded within last 5 seconds, consider it duplicate
           if (diff.inSeconds < 5) {
             return true;
           }
@@ -79,7 +74,6 @@ class SettlementService {
       }
       return false;
     } catch (e) {
-      // If we can't check for duplicates, err on the side of caution and proceed
       print('Warning: Could not check for duplicate settlements: $e');
       return false;
     }
@@ -152,12 +146,10 @@ class SettlementService {
 
           if (phoneNumber == fromPhone) {
             final currentBalance = (member['balance'] ?? 0.0) as num;
-            // When someone pays, their balance increases (they're owed less or owe more)
             members[i]['balance'] = currentBalance.toDouble() + amount;
             fromFound = true;
           } else if (phoneNumber == toPhone) {
             final currentBalance = (member['balance'] ?? 0.0) as num;
-            // When someone receives, their balance decreases (they owe less or are owed more)
             members[i]['balance'] = currentBalance.toDouble() - amount;
             toFound = true;
           }
@@ -169,10 +161,8 @@ class SettlementService {
           throw Exception('One or both members not found in group');
         }
 
-        // Update group members
         transaction.update(groupRef, {'members': members});
 
-        // Add settlement record
         final settlementRef = groupRef.collection('settlements').doc();
         transaction.set(settlementRef, {
           'type': 'settlement',
@@ -191,21 +181,28 @@ class SettlementService {
         );
       });
 
-      // Step 2: Update suggested settlements (WITH AWAIT)
+      // Step 2: Update suggested settlements
       print('🔄 Updating suggested settlements...');
       await updateSuggestedSettlements(groupId);
       print('✅ Suggested settlements updated');
 
-      // Step 3: Update friend balances (WITH AWAIT)
+      // Step 3: CRITICAL FIX - Clear friend service cache BEFORE recalculating
+      print('🔄 Clearing friend service cache...');
+      FriendsBalanceService().clearCache();
+
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Step 4: Update friend balances with fresh data
       print('🔄 Updating friend balances...');
       await FriendsBalanceService().onSettlementRecorded(
         groupId: groupId,
         fromPhone: fromPhone,
         toPhone: toPhone,
+        settlementAmount: amount,
       );
       print('✅ Friend balances updated');
 
-      // Step 4: Record activity
+      // Step 5: Record activity
       print('🔄 Recording activity...');
       await ActivityService().recordSettlementActivity(
         groupId: groupId,
@@ -240,7 +237,7 @@ class SettlementService {
 
       final groupData = groupDoc.data() as Map<String, dynamic>;
 
-      // Validate balances sum to zero (with tolerance for floating point errors)
+      // Validate balances sum to zero
       final members = List<Map<String, dynamic>>.from(
         groupData['members'] as List<dynamic>? ?? [],
       );
@@ -254,7 +251,6 @@ class SettlementService {
         print(
           '⚠️ WARNING: Group $groupId balances do not sum to zero! Total: ${totalBalance.toStringAsFixed(2)}',
         );
-        // Log for monitoring but continue - this might be a rounding issue
       }
 
       // Calculate settlements with fresh data
@@ -312,30 +308,6 @@ class SettlementService {
       print('❌ Error storing suggested settlements: $e');
       rethrow;
     }
-  }
-
-  /// Retry operation with exponential backoff
-  Future<T> _retryOperation<T>(
-    Future<T> Function() operation, {
-    int maxRetries = 3,
-    Duration initialDelay = const Duration(milliseconds: 500),
-  }) async {
-    for (int i = 0; i < maxRetries; i++) {
-      try {
-        return await operation();
-      } catch (e) {
-        if (i == maxRetries - 1) {
-          rethrow; // Last attempt failed, throw the error
-        }
-
-        final delay = initialDelay * (i + 1); // Exponential backoff
-        print(
-          '⚠️ Retry attempt ${i + 1}/$maxRetries after ${delay.inMilliseconds}ms',
-        );
-        await Future.delayed(delay);
-      }
-    }
-    throw Exception('Max retries exceeded');
   }
 
   /// Get settlement history for a group

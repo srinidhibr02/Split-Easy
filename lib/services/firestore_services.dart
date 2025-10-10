@@ -1,17 +1,22 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:split_easy/services/activity_service.dart';
 
 class FirestoreServices {
   final FirebaseFirestore _fireStore = FirebaseFirestore.instance;
-  final ActivityService _activityService = ActivityService();
-
   final _auth = FirebaseAuth.instance;
 
   String? get currentPhoneNumber => _auth.currentUser?.phoneNumber;
 
   DocumentReference getUserDoc(User user) {
     return _fireStore.collection("users").doc(user.phoneNumber);
+  }
+
+  Future<Map<String, dynamic>?> fetchUserData(String phoneNumber) async {
+    final doc = await FirebaseFirestore.instance
+        .collection("users")
+        .doc(phoneNumber)
+        .get();
+    return doc.exists ? doc.data() : null;
   }
 
   Stream<Map<String, dynamic>?> streamUserProfile(User user) {
@@ -23,6 +28,16 @@ class FirestoreServices {
 
   Future<void> updateUserProfile(User user, Map<String, dynamic> data) async {
     await getUserDoc(user).update(data);
+  }
+
+  Future<void> updateUserData(
+    String phoneNumber,
+    Map<String, dynamic> data,
+  ) async {
+    await _fireStore
+        .collection('users')
+        .doc(phoneNumber)
+        .set(data, SetOptions(merge: true));
   }
 
   Future<void> createUserInFireStore(User? user) async {
@@ -71,60 +86,6 @@ class FirestoreServices {
         "isProfileCompleted": true,
       });
     }
-  }
-
-  Future<void> createGroup({
-    required String groupName,
-    required String purpose,
-  }) async {
-    final userDoc = _fireStore.collection("users").doc(currentPhoneNumber);
-
-    // Get user data
-    final userSnapshot = await userDoc.get();
-    final userData = userSnapshot.exists ? userSnapshot.data()! : {};
-    final userName = userData["name"] ?? "Unknown";
-    final userAvatar = userData["avatar"] ?? "default_avatar_url";
-
-    // Define initial members list
-    final members = [
-      {
-        "phoneNumber": currentPhoneNumber,
-        "name": userName,
-        "avatar": userAvatar,
-      },
-    ];
-
-    // Extract only phone numbers for fast querying
-    final memberPhones = members
-        .map((m) => m["phoneNumber"] as String)
-        .toList();
-
-    // Create a new group in the global 'groups' collection
-    final newGroupDoc = await _fireStore.collection("groups").add({
-      "groupName": groupName,
-      "purpose": purpose,
-      "createdAt": FieldValue.serverTimestamp(),
-      "owner": {
-        "phoneNumber": currentPhoneNumber,
-        "name": userName,
-        "avatar": userAvatar,
-      },
-      "members": members,
-      "memberPhones": memberPhones, // <-- added for easier queries
-    });
-
-    final groupId = newGroupDoc.id;
-
-    // Add groupId to the owner's 'groups' array
-    await userDoc.update({
-      "groups": FieldValue.arrayUnion([groupId]),
-    });
-    _activityService.createGroupActivity(
-      groupId: groupId,
-      groupName: groupName,
-      creatorPhone: currentPhoneNumber as String,
-      creatorName: userName,
-    );
   }
 
   Stream<DocumentSnapshot<Map<String, dynamic>>> streamGroupById(

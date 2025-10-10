@@ -1,4 +1,4 @@
-import 'package:split_easy/dataModels/dataModels.dart';
+import 'package:split_easy/dataModels/data_models.dart';
 
 class SettlementCalculator {
   static List<Settlement> calculateSettlements(Map<String, dynamic> group) {

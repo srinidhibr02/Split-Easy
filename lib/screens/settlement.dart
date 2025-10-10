@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:split_easy/constants.dart';
-import 'package:split_easy/dataModels/dataModels.dart';
+import 'package:split_easy/dataModels/data_models.dart';
 import 'package:split_easy/services/settlement_calculator.dart';
 import 'package:split_easy/services/settlement_service.dart';
 
@@ -78,7 +78,10 @@ class _ModernSettlementScreenState extends State<ModernSettlementScreen> {
                       background: Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            colors: [primary, primary.withOpacity(0.7)],
+                            colors: [
+                              primary,
+                              primary.withAlpha((255 * 0.7).round()),
+                            ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
@@ -130,7 +133,9 @@ class _ModernSettlementScreenState extends State<ModernSettlementScreen> {
                                     vertical: 6,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
+                                    color: Colors.white.withAlpha(
+                                      (255 * 0.2).round(),
+                                    ),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(
@@ -157,7 +162,7 @@ class _ModernSettlementScreenState extends State<ModernSettlementScreen> {
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withAlpha((255 * 0.05).round()),
                             blurRadius: 10,
                             offset: const Offset(0, 2),
                           ),
@@ -278,7 +283,7 @@ class _ModernSettlementScreenState extends State<ModernSettlementScreen> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withAlpha((255 * 0.05).round()),
                   blurRadius: 10,
                   offset: const Offset(0, 2),
                 ),
@@ -443,12 +448,14 @@ class _ModernSettlementScreenState extends State<ModernSettlementScreen> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isMe ? primary.withOpacity(0.3) : Colors.transparent,
+                color: isMe
+                    ? primary.withAlpha((255 * 0.3).round())
+                    : Colors.transparent,
                 width: 2,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withAlpha((255 * 0.05).round()),
                   blurRadius: 10,
                   offset: const Offset(0, 2),
                 ),
@@ -468,7 +475,7 @@ class _ModernSettlementScreenState extends State<ModernSettlementScreen> {
                     color: hasAvatar
                         ? null
                         : isMe
-                        ? primary.withOpacity(0.1)
+                        ? primary.withAlpha((255 * 0.1).round())
                         : Colors.grey[100],
                     shape: BoxShape.circle,
                     image: DecorationImage(
@@ -501,7 +508,7 @@ class _ModernSettlementScreenState extends State<ModernSettlementScreen> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: primary.withOpacity(0.1),
+                          color: primary.withAlpha((255 * 0.1).round()),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -765,10 +772,13 @@ class _ModernSettlementScreenState extends State<ModernSettlementScreen> {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [primary.withOpacity(0.1), primary.withOpacity(0.05)],
+                colors: [
+                  primary.withAlpha((255 * 0.1).round()),
+                  primary.withAlpha((255 * 0.08).round()),
+                ],
               ),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: primary.withOpacity(0.2)),
+              border: Border.all(color: primary.withAlpha((255 * 0.2).round())),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -778,7 +788,7 @@ class _ModernSettlementScreenState extends State<ModernSettlementScreen> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: primary.withOpacity(0.2),
+                        color: primary.withAlpha((255 * 0.2).round()),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(Icons.person, color: primary, size: 20),
@@ -826,7 +836,7 @@ class _ModernSettlementScreenState extends State<ModernSettlementScreen> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withAlpha((255 * 0.05).round()),
                   blurRadius: 10,
                   offset: const Offset(0, 2),
                 ),
@@ -840,7 +850,7 @@ class _ModernSettlementScreenState extends State<ModernSettlementScreen> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.purple.withOpacity(0.1),
+                        color: Colors.purple.withAlpha((255 * 0.1).round()),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(Icons.groups, color: Colors.purple, size: 20),
@@ -887,12 +897,14 @@ class _ModernSettlementScreenState extends State<ModernSettlementScreen> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  Colors.green.withOpacity(0.1),
-                  Colors.green.withOpacity(0.05),
+                  Colors.green.withAlpha((255 * 0.1).round()),
+                  Colors.green.withAlpha((255 * 0.05).round()),
                 ],
               ),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.green.withOpacity(0.2)),
+              border: Border.all(
+                color: Colors.green.withAlpha((255 * 0.2).round()),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -902,7 +914,7 @@ class _ModernSettlementScreenState extends State<ModernSettlementScreen> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.2),
+                        color: Colors.green.withAlpha((255 * 0.2).round()),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -1064,7 +1076,9 @@ class _TabButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: isSelected ? primary.withOpacity(0.1) : Colors.transparent,
+          color: isSelected
+              ? primary.withAlpha((255 * 0.1).round())
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -1118,7 +1132,7 @@ class _StatItem extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withAlpha((255 * 0.1).round()),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Icon(icon, color: color, size: 18),
@@ -1160,7 +1174,7 @@ class _StatRow extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withAlpha((255 * 0.1).round()),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: color, size: 20),
@@ -1231,7 +1245,7 @@ class _ProgressBar extends StatelessWidget {
             Container(
               height: 8,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withAlpha((255 * 0.1).round()),
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -1241,7 +1255,7 @@ class _ProgressBar extends StatelessWidget {
                 height: 8,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [color, color.withOpacity(0.7)],
+                    colors: [color, color.withAlpha((255 * 0.7).round())],
                   ),
                   borderRadius: BorderRadius.circular(4),
                 ),

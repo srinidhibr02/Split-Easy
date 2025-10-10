@@ -7,7 +7,7 @@ class FriendsBalanceService {
   final Map<String, Map<String, dynamic>> _groupCache = {};
   final Map<String, List<Map<String, dynamic>>> _settlementCache = {};
 
-  /// Clear cache (call this when you want fresh data)
+  /// Clear cache (MUST be called after settlements are updated!)
   void clearCache() {
     _groupCache.clear();
     _settlementCache.clear();
@@ -36,21 +36,14 @@ class FriendsBalanceService {
       final groupId = group['id'] as String;
       List<Map<String, dynamic>> settlements;
 
-      // Use cache if available
-      if (_settlementCache.containsKey(groupId)) {
-        settlements = _settlementCache[groupId]!;
-      } else {
-        final settlementsSnapshot = await _firestore
-            .collection('groups')
-            .doc(groupId)
-            .collection('suggestedSettlements')
-            .get();
+      // ALWAYS fetch fresh data from server (no cache) to avoid stale data
+      final settlementsSnapshot = await _firestore
+          .collection('groups')
+          .doc(groupId)
+          .collection('suggestedSettlements')
+          .get(const GetOptions(source: Source.server)); // Force server read
 
-        settlements = settlementsSnapshot.docs
-            .map((doc) => doc.data())
-            .toList();
-        _settlementCache[groupId] = settlements;
-      }
+      settlements = settlementsSnapshot.docs.map((doc) => doc.data()).toList();
 
       for (var settlement in settlements) {
         final fromPhone = settlement['fromPhone'] as String;
@@ -72,57 +65,63 @@ class FriendsBalanceService {
   }
 
   /// Update friend's balance in Firestore
-  Future<void> updateFriendBalance({
-    required String userPhone,
-    required String friendPhone,
-    required double balance,
-    String? friendName,
-    String? friendAvatar,
-    String? userName,
-    String? userAvatar,
+  Future<void> updateFriendBalances({
+    required String fromPhone,
+    required String toPhone,
+    required double amount,
   }) async {
-    try {
-      // Update in user's friends collection
-      await _firestore
-          .collection('users')
-          .doc(userPhone)
-          .collection('friends')
-          .doc(friendPhone)
-          .set({
-            'phoneNumber': friendPhone,
-            if (friendName != null) 'name': friendName,
-            if (friendAvatar != null) 'avatar': friendAvatar,
-            'balance': balance,
-            'lastUpdated': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+    final firestore = FirebaseFirestore.instance;
 
-      // Update reciprocal balance in friend's collection (opposite sign)
-      await _firestore
-          .collection('users')
-          .doc(friendPhone)
-          .collection('friends')
-          .doc(userPhone)
-          .set({
-            'phoneNumber': userPhone,
-            if (userName != null) 'name': userName,
-            if (userAvatar != null) 'avatar': userAvatar,
-            'balance': -balance, // Opposite perspective
-            'lastUpdated': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-    } catch (e) {
-      print('❌ Error updating friend balance: $e');
-      rethrow; // Propagate error for proper handling
-    }
+    final fromFriendRef = firestore
+        .collection('users')
+        .doc(fromPhone)
+        .collection('friends')
+        .doc(toPhone);
+
+    final toFriendRef = firestore
+        .collection('users')
+        .doc(toPhone)
+        .collection('friends')
+        .doc(fromPhone);
+
+    await firestore.runTransaction((transaction) async {
+      final fromFriendSnap = await transaction.get(fromFriendRef);
+      final toFriendSnap = await transaction.get(toFriendRef);
+
+      final fromBalance =
+          (fromFriendSnap.exists &&
+              fromFriendSnap.data()!.containsKey('balance'))
+          ? (fromFriendSnap.get('balance') as num).toDouble()
+          : 0.0;
+
+      final toBalance =
+          (toFriendSnap.exists && toFriendSnap.data()!.containsKey('balance'))
+          ? (toFriendSnap.get('balance') as num).toDouble()
+          : 0.0;
+
+      final newFromBalance = fromBalance + amount;
+      final newToBalance = toBalance - amount;
+
+      transaction.set(fromFriendRef, {
+        'balance': newFromBalance,
+      }, SetOptions(merge: true));
+      transaction.set(toFriendRef, {
+        'balance': newToBalance,
+      }, SetOptions(merge: true));
+    });
+
+    print(
+      'Updated friend balances for $fromPhone and $toPhone by amount $amount',
+    );
   }
 
-  /// Batch update friend balances for efficiency
+  /// Batch update friend balances
   Future<void> _batchUpdateFriendBalances(
     List<Map<String, dynamic>> updates,
   ) async {
     if (updates.isEmpty) return;
 
-    // Firestore batch has limit of 500 operations
-    const batchSize = 250; // 250 pairs = 500 writes (user + friend)
+    const batchSize = 250;
 
     for (var i = 0; i < updates.length; i += batchSize) {
       final batch = _firestore.batch();
@@ -132,7 +131,6 @@ class FriendsBalanceService {
       final batchUpdates = updates.sublist(i, end);
 
       for (var update in batchUpdates) {
-        // Update user's view
         final userRef = _firestore
             .collection('users')
             .doc(update['userPhone'])
@@ -140,7 +138,6 @@ class FriendsBalanceService {
             .doc(update['friendPhone']);
         batch.set(userRef, update['userData'], SetOptions(merge: true));
 
-        // Update friend's view
         final friendRef = _firestore
             .collection('users')
             .doc(update['friendPhone'])
@@ -150,19 +147,14 @@ class FriendsBalanceService {
       }
 
       await batch.commit();
-      print(
-        '✅ Batch ${i ~/ batchSize + 1} committed (${batchUpdates.length} updates)',
-      );
     }
   }
 
-  /// Generate pair key for deduplication
   String _getPairKey(String phone1, String phone2) {
     final sorted = [phone1, phone2]..sort();
     return '${sorted[0]}_${sorted[1]}';
   }
 
-  /// Get member data by phone number
   Map<String, dynamic>? _getMemberData(
     List<Map<String, dynamic>> members,
     String phone,
@@ -174,24 +166,25 @@ class FriendsBalanceService {
     }
   }
 
-  /// Recalculate balances for affected members in a specific group
-  /// OPTIMIZED: Only recalculates balances between affected members
+  /// Recalculate balances for affected members
   Future<void> recalculateGroupFriendBalances({
     required String groupId,
     required List<String> affectedMemberPhones,
   }) async {
     try {
-      print('🔄 Recalculating friend balances for group: $groupId');
-      print('   Affected members: ${affectedMemberPhones.length}');
+      print('🔄 Recalculating friend balances...');
 
-      // Clear cache to ensure fresh data
+      // CRITICAL: Clear cache at the start
       clearCache();
 
-      // Get the group data once
-      final groupDoc = await _firestore.collection('groups').doc(groupId).get();
+      // Get fresh group data from server
+      final groupDoc = await _firestore
+          .collection('groups')
+          .doc(groupId)
+          .get(const GetOptions(source: Source.server));
 
       if (!groupDoc.exists) {
-        print('⚠️ Group not found: $groupId');
+        print('⚠️ Group not found');
         return;
       }
 
@@ -200,69 +193,54 @@ class FriendsBalanceService {
         groupData['members'] ?? [],
       );
 
-      // Create pairs of affected members
-      // Only need to recalculate balances between members who were affected
       final processedPairs = <String>{};
       final updates = <Map<String, dynamic>>[];
 
-      for (var i = 0; i < affectedMemberPhones.length; i++) {
-        final memberPhone = affectedMemberPhones[i];
-        final memberData = _getMemberData(members, memberPhone);
+      // For each affected member
+      for (var affectedPhone in affectedMemberPhones) {
+        final affectedMemberData = _getMemberData(members, affectedPhone);
+        if (affectedMemberData == null) continue;
 
-        if (memberData == null) {
-          print('⚠️ Member not found in group: $memberPhone');
-          continue;
-        }
-
-        // Get all groups this member is part of (cached after first fetch)
+        // Get all groups for this member
         final memberGroupsSnapshot = await _firestore
             .collection('groups')
-            .where('memberPhones', arrayContains: memberPhone)
-            .get();
+            .where('memberPhones', arrayContains: affectedPhone)
+            .get(const GetOptions(source: Source.server)); // Force fresh data
 
         final memberGroups = memberGroupsSnapshot.docs
             .map((doc) => {'id': doc.id, ...doc.data()})
             .toList();
 
-        // Process balance with other affected members
-        for (var j = 0; j < affectedMemberPhones.length; j++) {
-          if (i == j) continue; // Skip self
+        // Process with ALL other members in group
+        for (var otherMember in members) {
+          final otherPhone = otherMember['phoneNumber'] as String;
+          if (otherPhone == affectedPhone) continue;
 
-          final otherPhone = affectedMemberPhones[j];
-          final pairKey = _getPairKey(memberPhone, otherPhone);
-
-          // Skip if already processed this pair
+          final pairKey = _getPairKey(affectedPhone, otherPhone);
           if (processedPairs.contains(pairKey)) continue;
           processedPairs.add(pairKey);
 
-          final otherMemberData = _getMemberData(members, otherPhone);
-          if (otherMemberData == null) {
-            print('⚠️ Other member not found in group: $otherPhone');
-            continue;
-          }
-
-          // Calculate balance between these two members across all their common groups
+          // Calculate with FRESH data
           final balance = await calculateFriendBalance(
-            userPhone: memberPhone,
+            userPhone: affectedPhone,
             friendPhone: otherPhone,
             groups: memberGroups,
           );
 
-          // Prepare batch update
           updates.add({
-            'userPhone': memberPhone,
+            'userPhone': affectedPhone,
             'friendPhone': otherPhone,
             'userData': {
               'phoneNumber': otherPhone,
-              'name': otherMemberData['name'],
-              'avatar': otherMemberData['avatar'] ?? '',
+              'name': otherMember['name'],
+              'avatar': otherMember['avatar'] ?? '',
               'balance': balance,
               'lastUpdated': FieldValue.serverTimestamp(),
             },
             'friendData': {
-              'phoneNumber': memberPhone,
-              'name': memberData['name'],
-              'avatar': memberData['avatar'] ?? '',
+              'phoneNumber': affectedPhone,
+              'name': affectedMemberData['name'],
+              'avatar': affectedMemberData['avatar'] ?? '',
               'balance': -balance,
               'lastUpdated': FieldValue.serverTimestamp(),
             },
@@ -270,30 +248,25 @@ class FriendsBalanceService {
         }
       }
 
-      // Batch update all friend balances
       if (updates.isNotEmpty) {
         await _batchUpdateFriendBalances(updates);
-        print('✅ Friend balances updated: ${updates.length} relationships');
-      } else {
-        print('ℹ️ No friend balance updates needed');
+        print('✅ Updated ${updates.length} friend relationships');
       }
 
-      // Clear cache after successful update
+      // Clear cache after update
       clearCache();
     } catch (e) {
-      print('❌ Error recalculating group friend balances: $e');
-      clearCache(); // Clear cache on error too
+      print('❌ Error recalculating: $e');
+      clearCache();
       rethrow;
     }
   }
 
-  /// Call this after adding an expense
   Future<void> onExpenseAdded({
     required String groupId,
     required Map<String, double> paidBy,
     required Map<String, double> participants,
   }) async {
-    // All payers and participants are affected
     final affectedMembers = <String>{
       ...paidBy.keys,
       ...participants.keys,
@@ -305,7 +278,6 @@ class FriendsBalanceService {
     );
   }
 
-  /// Call this after editing an expense
   Future<void> onExpenseEdited({
     required String groupId,
     required Map<String, double> oldPaidBy,
@@ -313,7 +285,6 @@ class FriendsBalanceService {
     required Map<String, double> newPaidBy,
     required Map<String, double> newParticipants,
   }) async {
-    // All members involved in old or new expense are affected
     final affectedMembers = <String>{
       ...oldPaidBy.keys,
       ...oldParticipants.keys,
@@ -327,13 +298,11 @@ class FriendsBalanceService {
     );
   }
 
-  /// Call this after deleting an expense
   Future<void> onExpenseDeleted({
     required String groupId,
     required Map<String, double> paidBy,
     required Map<String, double> participants,
   }) async {
-    // All payers and participants are affected
     final affectedMembers = <String>{
       ...paidBy.keys,
       ...participants.keys,
@@ -345,31 +314,24 @@ class FriendsBalanceService {
     );
   }
 
-  /// Call this after recording a settlement
   Future<void> onSettlementRecorded({
     required String groupId,
     required String fromPhone,
     required String toPhone,
+    required double settlementAmount,
   }) async {
-    // Only the two members involved in the settlement are affected
-    final affectedMembers = [fromPhone, toPhone];
-
-    await recalculateGroupFriendBalances(
-      groupId: groupId,
-      affectedMemberPhones: affectedMembers,
+    await updateFriendBalances(
+      fromPhone: fromPhone,
+      toPhone: toPhone,
+      amount: settlementAmount,
     );
   }
 
-  /// Recalculate balances for a specific user with all their friends
-  /// Use this sparingly - only for initial setup or manual refresh
   Future<void> recalculateUserFriendBalances({
     required String userPhone,
     required List<Map<String, dynamic>> groups,
   }) async {
     try {
-      print('🔄 Recalculating all friend balances for user: $userPhone');
-
-      // Get all user's friends
       final friendsSnapshot = await _firestore
           .collection('users')
           .doc(userPhone)
@@ -382,14 +344,12 @@ class FriendsBalanceService {
         final friendPhone = friendDoc.id;
         final friendData = friendDoc.data();
 
-        // Recalculate balance using suggested settlements
         final balance = await calculateFriendBalance(
           userPhone: userPhone,
           friendPhone: friendPhone,
           groups: groups,
         );
 
-        // Prepare batch update
         updates.add({
           'userPhone': userPhone,
           'friendPhone': friendPhone,
@@ -408,18 +368,14 @@ class FriendsBalanceService {
         });
       }
 
-      // Batch update all friend balances
       if (updates.isNotEmpty) {
         await _batchUpdateFriendBalances(updates);
-        print('✅ All friend balances recalculated: ${updates.length} friends');
       }
     } catch (e) {
-      print('❌ Error recalculating user friend balances: $e');
       rethrow;
     }
   }
 
-  /// Stream friends with balances (real-time updates from stored data)
   Stream<List<Map<String, dynamic>>> streamFriendsWithBalances({
     required String userPhone,
   }) {
@@ -435,7 +391,6 @@ class FriendsBalanceService {
             final data = doc.data();
             final balance = (data['balance'] ?? 0.0) as double;
 
-            // Only include friends with non-zero balance
             if (balance.abs() > 0.01) {
               friends.add({
                 'phoneNumber': doc.id,
@@ -447,7 +402,6 @@ class FriendsBalanceService {
             }
           }
 
-          // Sort by absolute balance (highest first)
           friends.sort((a, b) {
             final balanceA = (a['balance'] as double).abs();
             final balanceB = (b['balance'] as double).abs();
@@ -458,7 +412,6 @@ class FriendsBalanceService {
         });
   }
 
-  /// Get total amount owed to user across all friends
   Future<double> getTotalOwedToUser(String userPhone) async {
     final friendsSnapshot = await _firestore
         .collection('users')
@@ -476,7 +429,6 @@ class FriendsBalanceService {
     return total;
   }
 
-  /// Get total amount user owes to others
   Future<double> getTotalUserOwes(String userPhone) async {
     final friendsSnapshot = await _firestore
         .collection('users')

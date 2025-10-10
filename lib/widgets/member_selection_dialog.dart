@@ -64,7 +64,9 @@ class _MemberSelectionDialogState extends State<MemberSelectionDialog> {
         _updateEqualSplit();
       } else {
         selectedMembers.clear();
-        controllers.values.forEach((c) => c.dispose());
+        for (var c in controllers.values) {
+          c.dispose();
+        }
         controllers.clear();
       }
     });
